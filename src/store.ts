@@ -5,7 +5,7 @@ import CharacterGrid from "./components/CharacterGrid.vue";
 import CharacterView from "./components/CharacterView.vue";
 
 export type Wiki = { id: string; label: string; accent: string; langs: string[] };
-export type Character = { name: string; image: string | null };
+export type Character = { name: string; image: string | null; gender: "m" | "f" | null };
 export type Line = { section: string; title: string; url: string; text: string };
 export type Item = Line & { wiki: string; character: string; lang: string };
 

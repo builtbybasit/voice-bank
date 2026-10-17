@@ -17,7 +17,7 @@ Open http://localhost:5173. `vp check --fix` formats, lints and type checks.
 
 ## Use
 
-1. Pick a game in the top bar, then a character from the grid.
+1. Pick a game in the top bar, then a character from the grid. The All/Female/Male toggle filters the grid and is remembered.
 2. Click a line to play it. Space pauses, `j`/`k` or arrow keys step through lines.
 3. Add lines with `+`, a whole section with "Select section", or everything with "Add all to sample set".
 4. Open "Sample set" and press "Export WAV".
@@ -41,6 +41,7 @@ Clips already on disk are skipped, so re-exporting a larger selection only fetch
 
 - **Server** (`server/`, Hono, runs inside the Vite dev server): talks to each wiki's MediaWiki `api.php`, parses the rendered voice-over page with cheerio, proxies audio and portraits from the Fandom CDN (which needs a `Referer` from the wiki), and converts clips with `ffmpeg`.
 - **UI** (`src/`, Vue 3): vue-router for `#/{game}/{Character}?lang=ja`, VueUse for the audio controls and persisted selection, lucide icons.
+- **Gender** comes from wiki categories (Genshin, ZZZ, WuWa). Honkai: Star Rail has none, so it is inferred from pronoun counts on the character's Lore page; a few characters (Trailblazer, Anaxa) stay unclassified and only show under "All".
 - **Caches**: character rosters are stored in `data/cache/characters-{game}.json` for 24 hours. Delete a file to refetch sooner, for example after a new character releases. Voice lines are cached in memory for the server's lifetime.
 
 Lines without a transcript on the wiki, such as combat grunts, are dropped.

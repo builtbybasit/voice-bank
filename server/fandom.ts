@@ -38,10 +38,18 @@ export const WIKIS = {
 } as const;
 export type WikiId = keyof typeof WIKIS;
 export type Lang = "en" | "ja" | "zh" | "ko";
-export type Character = { name: string; image: string | null };
+export type Gender = "m" | "f" | null;
+export type Character = { name: string; image: string | null; gender: Gender };
 export type Line = { section: string; title: string; url: string; text: string };
 
 const SKIP_SECTIONS = new Set(["Navigation", "Change History"]);
+// Gender categories across all wikis (HSR has none; see the pronoun fallback in characters()).
+const GENDER_CATS = ["Agents", "Resonators", "Characters"]
+  .flatMap((n) =>
+    ["Tall ", "Medium ", "Short ", ""].flatMap((s) => [`${s}Male ${n}`, `${s}Female ${n}`]),
+  )
+  .map((c) => `Category:${c}`)
+  .join("|");
 const cache = new Map<string, Promise<unknown>>();
 const DISK_TTL = 24 * 60 * 60 * 1000;
 
@@ -101,18 +109,50 @@ export const characters = (wiki: WikiId) =>
           if (!("missing" in p)) found.add(p.title.split("/")[0]);
       }
       const image = new Map<string, string>();
+      const gender = new Map<string, Gender>();
       for (const chunk of chunks([...found], 50)) {
         const q = await api(wiki, {
           action: "query",
           titles: chunk.join("|"),
-          prop: "pageimages",
+          prop: "pageimages|categories",
           piprop: "thumbnail",
           pithumbsize: "480",
+          clcategories: GENDER_CATS,
+          cllimit: "max",
         });
-        for (const p of Object.values<any>(q.query.pages))
+        for (const p of Object.values<any>(q.query.pages)) {
           if (p.thumbnail) image.set(p.title, p.thumbnail.source);
+          const g = new Set<Gender>(
+            (p.categories ?? []).map((c: any) => (/Female/.test(c.title) ? "f" : "m")),
+          );
+          if (g.size === 1) gender.set(p.title, [...g][0]!); // both (Traveler) stays unknown
+        }
       }
-      return [...found].sort().map((name) => ({ name, image: image.get(name) ?? null }));
+      // No gender categories (HSR): count pronouns in the third-person Lore subpage.
+      const unknown = [...found].filter((n) => !gender.has(n));
+      for (const chunk of chunks(unknown, 50)) {
+        const q = await api(wiki, {
+          action: "query",
+          titles: chunk.map((n) => `${n}/Lore`).join("|"),
+          prop: "revisions",
+          rvprop: "content",
+          rvslots: "main",
+        });
+        for (const p of Object.values<any>(q.query.pages)) {
+          const t: string = p.revisions?.[0].slots.main["*"] ?? "";
+          const f = t.match(/\b(she|her|hers|herself)\b/gi)?.length ?? 0;
+          const m = t.match(/\b(he|him|his|himself)\b/gi)?.length ?? 0;
+          const name = p.title.replace(/\/Lore$/, "");
+          if (f + m < 5) continue; // too little prose (Trailblazer is both)
+          if (f > m * 2) gender.set(name, "f");
+          else if (m > f * 2) gender.set(name, "m");
+        }
+      }
+      return [...found].sort().map((name) => ({
+        name,
+        image: image.get(name) ?? null,
+        gender: gender.get(name) ?? null,
+      }));
     }),
   );
 
