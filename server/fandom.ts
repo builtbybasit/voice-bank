@@ -1,5 +1,6 @@
 // Fandom wikis are MediaWiki: use api.php, never scrape blind HTML.
 import * as cheerio from "cheerio";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 
 export const WIKIS = {
   genshin: {
@@ -42,6 +43,21 @@ export type Line = { section: string; title: string; url: string; text: string }
 
 const SKIP_SECTIONS = new Set(["Navigation", "Change History"]);
 const cache = new Map<string, Promise<unknown>>();
+const DISK_TTL = 24 * 60 * 60 * 1000;
+
+/** JSON file cache under data/cache, refreshed when older than DISK_TTL. Delete the file to force a refetch. */
+async function disk<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const path = `data/cache/${name}.json`;
+  const fresh = await stat(path).then(
+    (s) => Date.now() - s.mtimeMs < DISK_TTL,
+    () => false,
+  );
+  if (fresh) return JSON.parse(await readFile(path, "utf8"));
+  const value = await fn();
+  await mkdir("data/cache", { recursive: true });
+  await writeFile(path, JSON.stringify(value));
+  return value;
+}
 
 // ponytail: process-lifetime memo; a disk cache if restarts get annoying
 function memo<T>(key: string, fn: () => Promise<T>): Promise<T> {
@@ -68,35 +84,37 @@ const chunks = <T>(a: T[], n: number) =>
 
 /** Characters on the list page that actually have a voice page, with a portrait. */
 export const characters = (wiki: WikiId) =>
-  memo(`chars:${wiki}`, async (): Promise<Character[]> => {
-    const { list, vo } = WIKIS[wiki];
-    const data = await api(wiki, { action: "parse", page: list, prop: "links" });
-    const names: string[] = data.parse.links
-      .filter((l: any) => l.ns === 0 && "exists" in l)
-      .map((l: any) => l["*"]);
-    const found = new Set<string>();
-    for (const chunk of chunks(names, 50)) {
-      const q = await api(wiki, {
-        action: "query",
-        titles: chunk.map((n) => `${n}/${vo}`).join("|"),
-      });
-      for (const p of Object.values<any>(q.query.pages))
-        if (!("missing" in p)) found.add(p.title.split("/")[0]);
-    }
-    const image = new Map<string, string>();
-    for (const chunk of chunks([...found], 50)) {
-      const q = await api(wiki, {
-        action: "query",
-        titles: chunk.join("|"),
-        prop: "pageimages",
-        piprop: "thumbnail",
-        pithumbsize: "480",
-      });
-      for (const p of Object.values<any>(q.query.pages))
-        if (p.thumbnail) image.set(p.title, p.thumbnail.source);
-    }
-    return [...found].sort().map((name) => ({ name, image: image.get(name) ?? null }));
-  });
+  memo(`chars:${wiki}`, () =>
+    disk(`characters-${wiki}`, async (): Promise<Character[]> => {
+      const { list, vo } = WIKIS[wiki];
+      const data = await api(wiki, { action: "parse", page: list, prop: "links" });
+      const names: string[] = data.parse.links
+        .filter((l: any) => l.ns === 0 && "exists" in l)
+        .map((l: any) => l["*"]);
+      const found = new Set<string>();
+      for (const chunk of chunks(names, 50)) {
+        const q = await api(wiki, {
+          action: "query",
+          titles: chunk.map((n) => `${n}/${vo}`).join("|"),
+        });
+        for (const p of Object.values<any>(q.query.pages))
+          if (!("missing" in p)) found.add(p.title.split("/")[0]);
+      }
+      const image = new Map<string, string>();
+      for (const chunk of chunks([...found], 50)) {
+        const q = await api(wiki, {
+          action: "query",
+          titles: chunk.join("|"),
+          prop: "pageimages",
+          piprop: "thumbnail",
+          pithumbsize: "480",
+        });
+        for (const p of Object.values<any>(q.query.pages))
+          if (p.thumbnail) image.set(p.title, p.thumbnail.source);
+      }
+      return [...found].sort().map((name) => ({ name, image: image.get(name) ?? null }));
+    }),
+  );
 
 const text = (el: cheerio.Cheerio<any>) => el.text().replace(/\s+/g, " ").trim();
 
