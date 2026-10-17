@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, CheckCheck, Pause, Play, Plus } from "@lucide/vue";
+import { ArrowLeft, Check, CheckCheck, Pause, Play, Plus, Sparkles } from "@lucide/vue";
 import { computed } from "vue";
 import {
   LANG_LABEL,
+  curate,
   go,
   isSelected,
+  picks,
   play,
   playing,
   portrait,
@@ -66,6 +68,20 @@ const jump = (id: string) =>
           <button class="ghost" :disabled="!state.lines.length" @click="play(state.lines[0])">
             <Play :size="16" /> Play from top
           </button>
+          <button
+            v-if="!picks().length"
+            class="ghost"
+            :disabled="!state.lines.length || state.curating"
+            @click="curate()"
+          >
+            <Sparkles :size="16" /> {{ state.curating ? "Asking Claude…" : "Curate with Claude" }}
+          </button>
+          <button v-else class="ghost" @click="toggleAll(picks())">
+            <Sparkles :size="16" />
+            {{
+              allSelected(picks()) ? "Remove picks from set" : `Add ${picks().length} picks to set`
+            }}
+          </button>
         </div>
       </div>
       <img v-if="me?.image" class="hero-portrait" :src="portrait(me, 800)" :alt="state.character" />
@@ -97,7 +113,11 @@ const jump = (id: string) =>
           v-for="l in s.lines"
           :key="l.url"
           class="line"
-          :class="{ playing: state.playing?.url === l.url, selected: isSelected(l.url) }"
+          :class="{
+            playing: state.playing?.url === l.url,
+            selected: isSelected(l.url),
+            keep: state.curated[l.url]?.keep,
+          }"
           @click="play(l)"
         >
           <button class="play" :aria-label="isPlaying(l) ? 'Pause' : 'Play'" @click.stop="play(l)">
@@ -105,7 +125,13 @@ const jump = (id: string) =>
             <Play v-else :size="16" />
           </button>
           <div class="body">
-            <strong>{{ l.title }}</strong>
+            <strong
+              >{{ l.title }}
+              <em v-if="state.curated[l.url]" class="tag">
+                <Sparkles v-if="state.curated[l.url].keep" :size="10" />
+                {{ state.curated[l.url].emotion }}</em
+              ></strong
+            >
             <p>{{ l.text }}</p>
           </div>
           <button

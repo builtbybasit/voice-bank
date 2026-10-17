@@ -8,6 +8,7 @@ export type Wiki = { id: string; label: string; accent: string; langs: string[] 
 export type Character = { name: string; image: string | null; gender: "m" | "f" | null };
 export type Line = { section: string; title: string; url: string; text: string };
 export type Item = Line & { wiki: string; character: string; lang: string };
+export type Verdict = { i: number; keep: boolean; emotion: string; text: string };
 
 export const LANG_LABEL: Record<string, string> = {
   en: "English",
@@ -43,6 +44,8 @@ export const state = reactive({
   playing: null as Item | null,
   queue: [] as Line[],
   trayOpen: false,
+  curated: {} as Record<string, Verdict>,
+  curating: false,
 });
 export const selection = useLocalStorage<Item[]>("voicebank:selection", []);
 
@@ -88,7 +91,27 @@ export function step(dir: 1 | -1) {
   if (next) state.playing = { ...state.playing!, ...next };
 }
 
-const get = (url: string) => fetch(url).then((r) => r.json());
+const get = (url: string, init?: RequestInit) => fetch(url, init).then((r) => r.json());
+
+/** Claude's verdicts keyed by clip url; cleaned transcripts replace the originals so exports get them too. */
+export async function curate() {
+  state.curating = true;
+  try {
+    const verdicts: Verdict[] = await get(
+      `/api/${state.wiki}/${encodeURIComponent(state.character)}/curate?lang=${state.lang}`,
+      { method: "POST" },
+    );
+    for (const v of verdicts) {
+      const line = state.lines[v.i];
+      if (!line) continue;
+      line.text = v.text;
+      state.curated[line.url] = v;
+    }
+  } finally {
+    state.curating = false;
+  }
+}
+export const picks = () => state.lines.filter((l) => state.curated[l.url]?.keep);
 export const init = async () => (state.wikis = await get("/api/wikis"));
 
 watch(
@@ -115,6 +138,7 @@ watch(
   () => [state.wiki, state.character, state.lang],
   async ([w, name, lang]) => {
     state.lines = [];
+    state.curated = {};
     if (!name) return;
     state.loading = true;
     try {

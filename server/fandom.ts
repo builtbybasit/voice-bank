@@ -54,10 +54,10 @@ const cache = new Map<string, Promise<unknown>>();
 const DISK_TTL = 24 * 60 * 60 * 1000;
 
 /** JSON file cache under data/cache, refreshed when older than DISK_TTL. Delete the file to force a refetch. */
-async function disk<T>(name: string, fn: () => Promise<T>): Promise<T> {
+export async function disk<T>(name: string, fn: () => Promise<T>, ttl = DISK_TTL): Promise<T> {
   const path = `data/cache/${name}.json`;
   const fresh = await stat(path).then(
-    (s) => Date.now() - s.mtimeMs < DISK_TTL,
+    (s) => Date.now() - s.mtimeMs < ttl,
     () => false,
   );
   if (fresh) return JSON.parse(await readFile(path, "utf8"));

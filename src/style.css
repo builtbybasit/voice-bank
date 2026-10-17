@@ -563,6 +563,24 @@ kbd {
   font-size: 14px;
   font-weight: 600;
 }
+.line .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.line.keep .tag {
+  border-color: color-mix(in oklab, var(--accent) 60%, var(--line));
+  color: var(--accent);
+}
 .line p {
   margin: 2px 0 0;
   color: var(--muted);

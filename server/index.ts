@@ -3,6 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, appendFile, mkdir } from "node:fs/promises";
+import { curate } from "./curate.ts";
 import { WIKIS, characters, fetchMedia, voiceLines, type Lang, type WikiId } from "./fandom.ts";
 
 const app = new Hono();
@@ -62,6 +63,16 @@ app.get("/api/:wiki/:name/lines", async (c) => {
   return w
     ? c.json(await voiceLines(w, c.req.param("name"), (c.req.query("lang") ?? "en") as Lang))
     : c.notFound();
+});
+
+/** Ask Claude (via `claude -p`) which lines make good cloning samples; returns one verdict per line, same order. */
+app.post("/api/:wiki/:name/curate", async (c) => {
+  const w = wiki(c.req.param("wiki"));
+  if (!w) return c.notFound();
+  const name = c.req.param("name");
+  const lang = (c.req.query("lang") ?? "en") as Lang;
+  const lines = await voiceLines(w, name, lang);
+  return c.json(await curate(`${w}-${slug(name)}-${lang}`, lines));
 });
 
 type Item = {
