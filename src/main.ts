@@ -1,5 +1,6 @@
 import { createApp } from "vue";
 import App from "./App.vue";
+import { init } from "./store.ts";
 import "./style.css";
 
-createApp(App).mount("#app");
+void init().then(() => createApp(App).mount("#app"));
