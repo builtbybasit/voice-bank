@@ -6,6 +6,10 @@ import { access, appendFile, mkdir } from "node:fs/promises";
 import { curate } from "./curate.ts";
 import { WIKIS, characters, fetchMedia, voiceLines, type Lang, type WikiId } from "./fandom.ts";
 
+try {
+  process.loadEnvFile(); // .env is optional; see .env.example
+} catch {}
+
 const app = new Hono();
 const wiki = (id: string) => (id in WIKIS ? (id as WikiId) : null);
 const slug = (s: string) => s.replace(/[^\w-]+/g, "_").replace(/^_|_$/g, "");

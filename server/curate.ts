@@ -58,9 +58,11 @@ const run = (lines: { title: string; text: string }[]) =>
         "--system-prompt",
         SYSTEM,
         "--model",
-        "opus",
+        process.env.CURATE_MODEL ?? "sonnet",
+        "--effort",
+        process.env.CURATE_EFFORT ?? "medium",
       ],
-      { maxBuffer: 1 << 26, timeout: 600_000 },
+      { maxBuffer: 1 << 26, timeout: Number(process.env.CURATE_TIMEOUT ?? 600) * 1000 },
       (e, stdout) => {
         if (e) return rej(e);
         const r = JSON.parse(stdout);

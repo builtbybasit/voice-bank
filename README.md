@@ -42,7 +42,7 @@ Clips already on disk are skipped, so re-exporting a larger selection only fetch
 
 - **Server** (`server/`, Hono, runs inside the Vite dev server): talks to each wiki's MediaWiki `api.php`, parses the rendered voice-over page with cheerio, proxies audio and portraits from the Fandom CDN (which needs a `Referer` from the wiki), and converts clips with `ffmpeg`.
 - **UI** (`src/`, Vue 3): vue-router for `#/{game}/{Character}?lang=ja`, VueUse for the audio controls and persisted selection, lucide icons.
-- **Curation** runs `claude -p --json-schema` from the server, so it uses your Claude Code login and subscription rather than API credits. Requires Claude Code installed and logged in. Verdicts are cached forever in `data/cache/curate-*.json`; delete one to redo a character. The model is a constant in `server/curate.ts`.
+- **Curation** runs `claude -p --json-schema` from the server, so it uses your Claude Code login and subscription rather than API credits. Requires Claude Code installed and logged in. Verdicts are cached forever in `data/cache/curate-*.json`; delete one to redo a character. Model, effort and timeout come from `.env` (copy `.env.example`).
 - **Gender** comes from wiki categories (Genshin, ZZZ, WuWa). Honkai: Star Rail has none, so it is inferred from pronoun counts on the character's Lore page; a few characters (Trailblazer, Anaxa) stay unclassified and only show under "All".
 - **Caches**: character rosters are stored in `data/cache/characters-{game}.json` for 24 hours. Delete a file to refetch sooner, for example after a new character releases. Voice lines are cached in memory for the server's lifetime.
 
