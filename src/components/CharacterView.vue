@@ -3,8 +3,10 @@ import { ArrowLeft, Check, CheckCheck, Pause, Play, Plus } from "@lucide/vue";
 import { computed } from "vue";
 import {
   LANG_LABEL,
+  go,
   isSelected,
   play,
+  playing,
   portrait,
   state,
   toggle,
@@ -23,14 +25,16 @@ const toggleAll = (lines: Line[]) => {
   const add = !allSelected(lines);
   for (const l of lines) if (isSelected(l.url) !== add) toggle(l);
 };
-const isPlaying = (l: Line) => state.playing?.url === l.url && !state.paused;
+const isPlaying = (l: Line) => state.playing?.url === l.url && playing.value;
+const jump = (id: string) =>
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 </script>
 
 <template>
   <article class="character">
     <div class="hero" :style="me?.image ? { '--bg': `url(${portrait(me, 800)})` } : {}">
       <div class="hero-body">
-        <button class="back" @click="state.character = ''">
+        <button class="back" @click="go(state.wiki)">
           <ArrowLeft :size="16" /> {{ wiki()?.label }}
         </button>
         <h1>{{ state.character }}</h1>
@@ -40,12 +44,12 @@ const isPlaying = (l: Line) => state.playing?.url === l.url && !state.paused;
             >{{ state.lines.length }} transcribed lines · {{ sections.length }} sections</span
           >
         </p>
-        <div class="langs" v-if="(wiki()?.langs.length ?? 0) > 1">
+        <div v-if="(wiki()?.langs.length ?? 0) > 1" class="langs">
           <button
             v-for="l in wiki()?.langs"
             :key="l"
             :class="{ active: l === state.lang }"
-            @click="state.lang = l"
+            @click="go(state.wiki, state.character, l)"
           >
             {{ LANG_LABEL[l] }}
           </button>
@@ -68,16 +72,9 @@ const isPlaying = (l: Line) => state.playing?.url === l.url && !state.paused;
     </div>
 
     <nav v-if="sections.length > 1" class="section-nav">
-      <a
-        v-for="s in sections"
-        :key="s.id"
-        :href="`#${s.id}`"
-        @click.prevent="
-          document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        "
+      <a v-for="s in sections" :key="s.id" :href="`#${s.id}`" @click.prevent="jump(s.id)"
+        >{{ s.name }} <small>{{ s.lines.length }}</small></a
       >
-        {{ s.name }} <small>{{ s.lines.length }}</small>
-      </a>
     </nav>
 
     <div v-if="state.loading" class="lines">

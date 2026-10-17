@@ -1,42 +1,31 @@
 <script setup lang="ts">
 import { Download, Trash2, X } from "@lucide/vue";
+import { createParser } from "eventsource-parser";
 import { computed, ref } from "vue";
-import { LANG_LABEL, state, type Item } from "../store.ts";
+import { LANG_LABEL, selection, state, type Item } from "../store.ts";
 
-const groups = computed(() => {
-  const m = new Map<string, Item[]>();
-  for (const i of state.selection) {
-    const k = `${i.wiki}/${i.character}/${i.lang}`;
-    m.set(k, [...(m.get(k) ?? []), i]);
-  }
-  return [...m.values()];
-});
-const remove = (i: Item) => state.selection.splice(state.selection.indexOf(i), 1);
+const groups = computed(() =>
+  Map.groupBy(selection.value, (i) => `${i.wiki}/${i.character}/${i.lang}`)
+    .values()
+    .toArray(),
+);
+const remove = (i: Item) => selection.value.splice(selection.value.indexOf(i), 1);
 const label = (id: string) => state.wikis.find((w) => w.id === id)?.label ?? id;
 
 const progress = ref<{ done: number; total: number; file?: string } | null>(null);
 const result = ref("");
 
 async function exportAll() {
-  progress.value = { done: 0, total: state.selection.length };
+  progress.value = { done: 0, total: selection.value.length };
   result.value = "";
   const res = await fetch("/api/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items: state.selection }),
+    body: JSON.stringify({ items: selection.value }),
   });
+  const parser = createParser({ onEvent: (e) => (progress.value = JSON.parse(e.data)) });
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
-  let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += value;
-    for (const msg of buf.split("\n\n").slice(0, -1)) {
-      const data = msg.match(/^data: (.*)$/m)?.[1];
-      if (data) progress.value = JSON.parse(data);
-    }
-    buf = buf.slice(buf.lastIndexOf("\n\n") + 2);
-  }
+  for (let r = await reader.read(); !r.done; r = await reader.read()) parser.feed(r.value);
   result.value = `${progress.value?.done} WAV files + metadata.jsonl written under data/`;
   progress.value = null;
 }
@@ -48,7 +37,7 @@ async function exportAll() {
       <header>
         <div>
           <h2>Sample set</h2>
-          <p class="muted">{{ state.selection.length }} clips · 24 kHz mono WAV + metadata.jsonl</p>
+          <p class="muted">{{ selection.length }} clips · 24 kHz mono WAV + metadata.jsonl</p>
         </div>
         <button class="icon" aria-label="Close" @click="state.trayOpen = false">
           <X :size="18" />
@@ -56,7 +45,7 @@ async function exportAll() {
       </header>
 
       <div class="tray-body">
-        <p v-if="!state.selection.length" class="empty">
+        <p v-if="!selection.length" class="empty">
           Nothing yet. Add lines with <b>+</b> or “Add all to sample set”.
         </p>
         <section v-for="g in groups" :key="g[0].wiki + g[0].character + g[0].lang">
@@ -87,16 +76,12 @@ async function exportAll() {
         <div class="row">
           <button
             class="ghost"
-            :disabled="!state.selection.length || !!progress"
-            @click="state.selection.splice(0)"
+            :disabled="!selection.length || !!progress"
+            @click="selection.splice(0)"
           >
             <Trash2 :size="16" /> Clear
           </button>
-          <button
-            class="primary"
-            :disabled="!state.selection.length || !!progress"
-            @click="exportAll"
-          >
+          <button class="primary" :disabled="!selection.length || !!progress" @click="exportAll">
             <Download :size="16" /> Export WAV
           </button>
         </div>

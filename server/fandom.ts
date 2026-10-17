@@ -1,4 +1,6 @@
 // Fandom wikis are MediaWiki: use api.php, never scrape blind HTML.
+import * as cheerio from "cheerio";
+
 export const WIKIS = {
   genshin: {
     base: "https://genshin-impact.fandom.com",
@@ -61,18 +63,6 @@ async function api(wiki: WikiId, params: Record<string, string>) {
   return res.json();
 }
 
-// ponytail: tooltip bodies assumed span-free inside; use a real HTML parser if WuWa nests deeper
-const strip = (html: string) =>
-  html
-    .replace(/<span class="wuwa-extra-effect-(header|content)">[\s\S]*?<\/span>/g, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
 const chunks = <T>(a: T[], n: number) =>
   Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
@@ -108,33 +98,45 @@ export const characters = (wiki: WikiId) =>
     return [...found].sort().map((name) => ({ name, image: image.get(name) ?? null }));
   });
 
+const text = (el: cheerio.Cheerio<any>) => el.text().replace(/\s+/g, " ").trim();
+
 /** Every row with an audio clip and a transcript, grouped by h2 section. Rows without text (combat grunts) are dropped. */
 export const voiceLines = (wiki: WikiId, name: string, lang: Lang) =>
   memo(`lines:${wiki}:${name}:${lang}`, async (): Promise<Line[]> => {
     const { vo, langs } = WIKIS[wiki];
     const suffix = (langs as Record<string, string>)[lang];
     if (suffix === undefined) return [];
-    const page = `${name}/${vo}${suffix ? `/${suffix}` : ""}`;
-    const data = await api(wiki, { action: "parse", page, prop: "text" });
-    const html: string = data.parse.text["*"];
+    const data = await api(wiki, {
+      action: "parse",
+      page: `${name}/${vo}${suffix ? `/${suffix}` : ""}`,
+      prop: "text",
+    });
+    const $ = cheerio.load(data.parse.text["*"]);
+    $(".mw-editsection, .wuwa-extra-effect-header, .wuwa-extra-effect-content").remove(); // edit links + hidden lore tooltips
     const lines: Line[] = [];
-    for (const block of html.split("<h2").slice(1)) {
-      const head = block.slice(0, block.indexOf("</h2>"));
-      const section = strip(head.match(/id="([^"]+)"/)?.[1] ?? "").replace(/_/g, " ");
-      if (SKIP_SECTIONS.has(section)) continue;
+    $("h2").each((_, h2) => {
+      const section = text($(h2));
+      if (SKIP_SECTIONS.has(section)) return;
+      const heading = $(h2).parent().is(".mw-heading") ? $(h2).parent() : $(h2);
       let title = "";
-      for (const row of block.split("<tr")) {
-        const url = row.match(/https:\/\/static\.wikia\.nocookie\.net\/[^"\s]+?\.ogg[^"\s]*/)?.[0];
-        title = strip(row.match(/<th[^>]*>([\s\S]*?)<\/th>/)?.[1] ?? title); // rowspan: title carries to following rows
-        const cells = [
-          ...row
-            .replace(/<audio[\s\S]*?<\/audio>|<a [^>]*class="internal"[^>]*>[\s\S]*?<\/a>/g, "")
-            .matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g),
-        ].map((m) => strip(m[1]));
-        const text = cells.filter(Boolean).at(-1) ?? "";
-        if (url && title && text) lines.push({ section, title, url, text });
-      }
-    }
+      heading
+        .nextUntil(".mw-heading, h2")
+        .find("tr")
+        .each((_, tr) => {
+          const row = $(tr);
+          const url = row.find("audio").attr("src") ?? row.find('a[href*=".ogg"]').attr("href");
+          row.find("audio, a.internal").remove();
+          title = text(row.find("th").first()) || title; // rowspan: title carries to following rows
+          const transcript =
+            row
+              .find("td")
+              .map((_, td) => text($(td)))
+              .get()
+              .filter(Boolean)
+              .at(-1) ?? "";
+          if (url && transcript) lines.push({ section, title, url, text: transcript });
+        });
+    });
     return lines;
   });
 

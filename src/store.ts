@@ -1,4 +1,8 @@
-import { reactive, watch } from "vue";
+import { useLocalStorage, useMediaControls } from "@vueuse/core";
+import { computed, reactive, ref, watch } from "vue";
+import { createRouter, createWebHashHistory } from "vue-router";
+import CharacterGrid from "./components/CharacterGrid.vue";
+import CharacterView from "./components/CharacterView.vue";
 
 export type Wiki = { id: string; label: string; accent: string; langs: string[] };
 export type Character = { name: string; image: string | null };
@@ -12,13 +16,21 @@ export const LANG_LABEL: Record<string, string> = {
   ko: "한국어",
 };
 
-const saved = (() => {
-  try {
-    return JSON.parse(localStorage.getItem("voicebank:selection") ?? "[]") as Item[];
-  } catch {
-    return [];
-  }
-})();
+export const router = createRouter({
+  history: createWebHashHistory(),
+  scrollBehavior: () => ({ top: 0 }),
+  routes: [
+    { path: "/", redirect: "/genshin" },
+    { path: "/:wiki", name: "grid", component: CharacterGrid },
+    { path: "/:wiki/:name", name: "character", component: CharacterView },
+  ],
+});
+export const go = (wiki: string, name = "", lang = "en") =>
+  router.push({
+    name: name ? "character" : "grid",
+    params: name ? { wiki, name } : { wiki },
+    query: lang === "en" ? {} : { lang },
+  });
 
 export const state = reactive({
   wikis: [] as Wiki[],
@@ -28,12 +40,11 @@ export const state = reactive({
   characters: {} as Record<string, Character[]>,
   lines: [] as Line[],
   loading: false,
-  selection: saved,
   playing: null as Item | null,
   queue: [] as Line[],
-  paused: true,
   trayOpen: false,
 });
+export const selection = useLocalStorage<Item[]>("voicebank:selection", []);
 
 export const wiki = () => state.wikis.find((w) => w.id === state.wiki);
 export const media = (wikiId: string, url: string) =>
@@ -42,12 +53,12 @@ export const portrait = (c: Character, width = 480) =>
   c.image
     ? media(state.wiki, c.image.replace(/scale-to-width-down\/\d+/, `scale-to-width-down/${width}`))
     : "";
-export const isSelected = (url: string) => state.selection.some((i) => i.url === url);
+export const isSelected = (url: string) => selection.value.some((i) => i.url === url);
 export const toggle = (line: Line) => {
-  const i = state.selection.findIndex((s) => s.url === line.url);
-  if (i >= 0) state.selection.splice(i, 1);
+  const i = selection.value.findIndex((s) => s.url === line.url);
+  if (i >= 0) selection.value.splice(i, 1);
   else
-    state.selection.push({
+    selection.value.push({
       ...line,
       wiki: state.wiki,
       character: state.character,
@@ -55,13 +66,19 @@ export const toggle = (line: Line) => {
     });
 };
 
+/** One <audio autoplay> lives in Player.vue; VueUse keeps playing/currentTime/duration in sync with it. */
+export const audioEl = ref<HTMLAudioElement>();
+export const { playing, currentTime, duration, ended } = useMediaControls(audioEl, {
+  src: computed(() => (state.playing ? media(state.playing.wiki, state.playing.url) : "")),
+});
+watch(ended, (e) => e && step(1));
+
 /** Playing snapshots the current character's lines as the queue, so prev/next keep working after navigating away. */
 export function play(line: Line) {
-  if (state.playing?.url === line.url) state.paused = !state.paused;
+  if (state.playing?.url === line.url) playing.value = !playing.value;
   else {
     state.playing = { ...line, wiki: state.wiki, character: state.character, lang: state.lang };
     state.queue = state.lines;
-    state.paused = false;
   }
 }
 export function step(dir: 1 | -1) {
@@ -71,36 +88,24 @@ export function step(dir: 1 | -1) {
 }
 
 const get = (url: string) => fetch(url).then((r) => r.json());
-
-export async function init() {
-  state.wikis = await get("/api/wikis");
-  readHash();
-  window.addEventListener("hashchange", readHash);
-}
-
-function readHash() {
-  const [path, qs] = location.hash.slice(1).split("?");
-  const [, w = "genshin", name = ""] = path.split("/");
-  state.wiki = state.wikis.some((x) => x.id === w) ? w : "genshin";
-  state.character = decodeURIComponent(name);
-  state.lang = new URLSearchParams(qs).get("lang") ?? "en";
-}
+export const init = async () => (state.wikis = await get("/api/wikis"));
 
 watch(
-  () => [state.wiki, state.character, state.lang],
-  () => {
-    const q = state.lang !== "en" ? `?lang=${state.lang}` : "";
-    const h = `/${state.wiki}${state.character ? `/${encodeURIComponent(state.character)}` : ""}${q}`;
-    if (location.hash.slice(1) !== h) history.replaceState(null, "", `#${h}`);
+  router.currentRoute,
+  (r) => {
+    state.wiki = String(r.params.wiki ?? "genshin");
+    state.character = String(r.params.name ?? "");
+    state.lang = String(r.query.lang ?? "en");
   },
+  { immediate: true },
 );
 
 watch(
-  () => state.wiki,
-  async (w) => {
+  () => [state.wiki, state.wikis] as const,
+  async ([w]) => {
     document.documentElement.style.setProperty("--accent", wiki()?.accent ?? "#e3b95c");
-    if (!wiki()?.langs.includes(state.lang)) state.lang = "en";
-    if (!state.characters[w]) state.characters[w] = await get(`/api/${w}/characters`);
+    if (state.wikis.length && !state.characters[w])
+      state.characters[w] = await get(`/api/${w}/characters`);
   },
   { immediate: true },
 );
@@ -109,7 +114,6 @@ watch(
   () => [state.wiki, state.character, state.lang],
   async ([w, name, lang]) => {
     state.lines = [];
-    window.scrollTo({ top: 0 });
     if (!name) return;
     state.loading = true;
     try {
@@ -119,10 +123,4 @@ watch(
     }
   },
   { immediate: true },
-);
-
-watch(
-  () => state.selection,
-  (s) => localStorage.setItem("voicebank:selection", JSON.stringify(s)),
-  { deep: true },
 );
