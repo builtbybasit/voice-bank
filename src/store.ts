@@ -74,11 +74,12 @@ export const { playing, currentTime, duration, ended } = useMediaControls(audioE
 watch(ended, (e) => e && step(1));
 
 /** Playing snapshots the current character's lines as the queue, so prev/next keep working after navigating away. */
-export function play(line: Line) {
+/** A plain Line comes from the current character page; an Item (sample set) carries its own wiki/character/lang. */
+export function play(line: Line | Item, queue: Line[] = state.lines) {
   if (state.playing?.url === line.url) playing.value = !playing.value;
   else {
-    state.playing = { ...line, wiki: state.wiki, character: state.character, lang: state.lang };
-    state.queue = state.lines;
+    state.playing = { wiki: state.wiki, character: state.character, lang: state.lang, ...line };
+    state.queue = queue;
   }
 }
 export function step(dir: 1 | -1) {

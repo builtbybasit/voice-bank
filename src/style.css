@@ -752,6 +752,17 @@ kbd {
   font-size: 12px;
   opacity: 0.7;
 }
+.tray li.playing {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.tray li.playing > .icon:first-child {
+  background: var(--accent);
+  color: #111;
+}
+.tray li > span {
+  flex: 1;
+}
 .tray li:hover {
   color: var(--fg);
   border-color: var(--accent);

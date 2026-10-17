@@ -25,7 +25,14 @@ Open http://localhost:5173. `vp check --fix` formats, lints and type checks.
 Exports land in `data/{game}/{Character}/{lang}/` as `{title}-{hash}.wav` plus `metadata.jsonl`, one JSON object per line:
 
 ```json
-{"audio":"data/genshin/Furina/en/Hello-0214bdbc.wav","text":"Why are you just standing there...","title":"Hello","character":"Furina","game":"genshin","lang":"en"}
+{
+  "audio": "data/genshin/Furina/en/Hello-0214bdbc.wav",
+  "text": "Why are you just standing there...",
+  "title": "Hello",
+  "character": "Furina",
+  "game": "genshin",
+  "lang": "en"
+}
 ```
 
 Clips already on disk are skipped, so re-exporting a larger selection only fetches the new ones. The selection itself is kept in `localStorage`.

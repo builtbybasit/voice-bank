@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Download, Trash2, X } from "@lucide/vue";
+import { Download, Pause, Play, Trash2, X } from "@lucide/vue";
 import { createParser } from "eventsource-parser";
 import { computed, ref } from "vue";
-import { LANG_LABEL, selection, state, type Item } from "../store.ts";
+import { LANG_LABEL, play, playing, selection, state, type Item } from "../store.ts";
 
 const groups = computed(() =>
   Map.groupBy(selection.value, (i) => `${i.wiki}/${i.character}/${i.lang}`)
@@ -54,7 +54,15 @@ async function exportAll() {
             <small>{{ label(g[0].wiki) }} · {{ LANG_LABEL[g[0].lang] }} · {{ g.length }}</small>
           </h3>
           <ul>
-            <li v-for="i in g" :key="i.url">
+            <li v-for="i in g" :key="i.url" :class="{ playing: state.playing?.url === i.url }">
+              <button
+                class="icon"
+                :aria-label="state.playing?.url === i.url && playing ? 'Pause' : 'Play'"
+                @click="play(i, g)"
+              >
+                <Pause v-if="state.playing?.url === i.url && playing" :size="14" />
+                <Play v-else :size="14" />
+              </button>
               <span
                 ><b>{{ i.title }}</b
                 ><small>{{ i.text }}</small></span
