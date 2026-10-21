@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { AudioLines, Library } from "@lucide/vue";
+import { AudioLines, ImageIcon, ImageOffIcon, Library } from "@lucide/vue";
 import Player from "./components/Player.vue";
 import SampleTray from "./components/SampleTray.vue";
-import { go, selection, state } from "./store.ts";
+import { go, selection, showImages, state } from "./store.ts";
 </script>
 
 <template>
@@ -21,6 +21,15 @@ import { go, selection, state } from "./store.ts";
         <i></i>{{ w.label }}
       </button>
     </nav>
+    <button
+      class="tray-btn"
+      :class="{ has: showImages }"
+      :aria-pressed="showImages"
+      :aria-label="showImages ? 'Hide images' : 'Show images'"
+      @click="showImages = !showImages"
+    >
+      <component :is="showImages ? ImageIcon : ImageOffIcon" :size="18" />
+    </button>
     <button
       class="tray-btn"
       :class="{ has: selection.length }"

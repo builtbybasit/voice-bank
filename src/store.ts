@@ -48,6 +48,7 @@ export const state = reactive({
   curating: false,
 });
 export const selection = useLocalStorage<Item[]>("voicebank:selection", []);
+export const showImages = useLocalStorage("voicebank:images", false);
 
 export const wiki = () => state.wikis.find((w) => w.id === state.wiki);
 export const media = (wikiId: string, url: string) =>

@@ -2,7 +2,7 @@
 import { Search } from "@lucide/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { computed, ref } from "vue";
-import { go, portrait, state, wiki } from "../store.ts";
+import { go, portrait, showImages, state, wiki } from "../store.ts";
 
 const GENDERS = [
   ["", "All"],
@@ -60,7 +60,7 @@ const filtered = computed(() =>
         @click="go(state.wiki, c.name)"
       >
         <img
-          v-if="c.image"
+          v-if="showImages && c.image"
           :src="portrait(c)"
           :alt="c.name"
           loading="lazy"

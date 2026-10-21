@@ -10,6 +10,7 @@ import {
   play,
   playing,
   portrait,
+  showImages,
   state,
   toggle,
   wiki,
@@ -34,7 +35,10 @@ const jump = (id: string) =>
 
 <template>
   <article class="character">
-    <div class="hero" :style="me?.image ? { '--bg': `url(${portrait(me, 800)})` } : {}">
+    <div
+      class="hero"
+      :style="showImages && me?.image ? { '--bg': `url(${portrait(me, 800)})` } : {}"
+    >
       <div class="hero-body">
         <button class="back" @click="go(state.wiki)">
           <ArrowLeft :size="16" /> {{ wiki()?.label }}
@@ -84,7 +88,12 @@ const jump = (id: string) =>
           </button>
         </div>
       </div>
-      <img v-if="me?.image" class="hero-portrait" :src="portrait(me, 800)" :alt="state.character" />
+      <img
+        v-if="showImages && me?.image"
+        class="hero-portrait"
+        :src="portrait(me, 800)"
+        :alt="state.character"
+      />
     </div>
 
     <nav v-if="sections.length > 1" class="section-nav">
