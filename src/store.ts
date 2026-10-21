@@ -46,6 +46,7 @@ export const state = reactive({
   trayOpen: false,
   curated: {} as Record<string, Verdict>,
   curating: false,
+  flushing: false,
 });
 export const selection = useLocalStorage<Item[]>("voicebank:selection", []);
 export const showImages = useLocalStorage("voicebank:images", false);
@@ -116,6 +117,21 @@ export async function curate() {
     }
   } finally {
     state.curating = false;
+  }
+}
+/** Drop the server's cached roster and voice lines for this game, then reload them from the wiki. */
+export async function flush() {
+  const w = state.wiki;
+  state.flushing = true;
+  try {
+    await fetch(`/api/${w}/flush`, { method: "POST" });
+    state.characters[w] = await get(`/api/${w}/characters`);
+    if (state.character)
+      state.lines = await get(
+        `/api/${w}/${encodeURIComponent(state.character)}/lines?lang=${state.lang}`,
+      );
+  } finally {
+    state.flushing = false;
   }
 }
 export const picks = () => state.lines.filter((l) => state.curated[l.url]?.keep);

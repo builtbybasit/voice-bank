@@ -4,6 +4,7 @@ import {
   WIKIS,
   characters,
   fetchMedia,
+  flush,
   voiceLines,
   type Kv,
   type Lang,
@@ -32,6 +33,13 @@ app.get("/api/wikis", (c) =>
 app.get("/api/:wiki/characters", async (c) => {
   const w = wiki(c.req.param("wiki"));
   return w ? c.json(await characters(w, c.env.CACHE)) : c.notFound();
+});
+
+app.post("/api/:wiki/flush", async (c) => {
+  const w = wiki(c.req.param("wiki"));
+  if (!w) return c.notFound();
+  await flush(w, c.env.CACHE);
+  return c.body(null, 204);
 });
 
 // Buffered so Range requests work: Chrome needs them to read an Ogg's duration. Clips are a few hundred KB at most.

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { AudioLines, ImageIcon, ImageOffIcon, Library, Moon, Sun } from "@lucide/vue";
+import { AudioLines, ImageIcon, ImageOffIcon, Library, Moon, RefreshCw, Sun } from "@lucide/vue";
 import Player from "./components/Player.vue";
 import SampleTray from "./components/SampleTray.vue";
-import { go, selection, showImages, state, theme } from "./store.ts";
+import { flush, go, selection, showImages, state, theme } from "./store.ts";
 </script>
 
 <template>
@@ -23,6 +23,15 @@ import { go, selection, showImages, state, theme } from "./store.ts";
     </nav>
     <button
       class="tray-btn"
+      aria-label="Flush cache"
+      title="Flush cache: refetch this game's characters and lines from the wiki"
+      :disabled="state.flushing"
+      @click="flush()"
+    >
+      <RefreshCw :class="{ spin: state.flushing }" :size="18" />
+    </button>
+    <button
+      class="tray-btn"
       :aria-label="theme === 'dark' ? 'Light mode' : 'Dark mode'"
       @click="theme = theme === 'dark' ? 'light' : 'dark'"
     >
@@ -40,10 +49,10 @@ import { go, selection, showImages, state, theme } from "./store.ts";
     <button
       class="tray-btn"
       :class="{ has: selection.length }"
+      aria-label="Sample set"
       @click="state.trayOpen = !state.trayOpen"
     >
       <Library :size="18" />
-      <span>Sample set</span>
       <b v-if="selection.length">{{ selection.length }}</b>
     </button>
   </header>

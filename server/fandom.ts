@@ -1,6 +1,6 @@
 // Fandom wikis are MediaWiki: use api.php, never scrape blind HTML.
 import * as cheerio from "cheerio/slim"; // the full entry imports undici, which Workers lack
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 
 export const WIKIS = {
   genshin: {
@@ -57,6 +57,7 @@ const DISK_TTL = 24 * 60 * 60 * 1000;
 export type Kv = {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, opts: { expirationTtl: number }): Promise<void>;
+  delete(key: string): Promise<void>;
 };
 
 /** JSON cache refreshed when older than ttl: Workers KV when deployed, else files under data/cache. Delete the key or file to force a refetch. */
@@ -108,76 +109,81 @@ async function api(wiki: WikiId, params: Record<string, string>) {
 const chunks = <T>(a: T[], n: number) =>
   Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
-/** Characters on the list page that actually have a voice page, with a portrait. */
+/** Characters on the list page that actually have a voice page, with a portrait. Not memoized, so a flush reaches every isolate. */
 export const characters = (wiki: WikiId, kv?: Kv) =>
-  memo(`chars:${wiki}`, () =>
-    disk(
-      `characters-${wiki}`,
-      async (): Promise<Character[]> => {
-        const { list, vo } = WIKIS[wiki];
-        const data = await api(wiki, { action: "parse", page: list, prop: "links" });
-        const names: string[] = data.parse.links
-          .filter((l: any) => l.ns === 0 && "exists" in l)
-          .map((l: any) => l["*"]);
-        const found = new Set<string>();
-        for (const chunk of chunks(names, 50)) {
-          const q = await api(wiki, {
-            action: "query",
-            titles: chunk.map((n) => `${n}/${vo}`).join("|"),
-          });
-          for (const p of Object.values<any>(q.query.pages))
-            if (!("missing" in p)) found.add(p.title.split("/")[0]);
+  disk(
+    `characters-${wiki}`,
+    async (): Promise<Character[]> => {
+      const { list, vo } = WIKIS[wiki];
+      const data = await api(wiki, { action: "parse", page: list, prop: "links" });
+      const names: string[] = data.parse.links
+        .filter((l: any) => l.ns === 0 && "exists" in l)
+        .map((l: any) => l["*"]);
+      const found = new Set<string>();
+      for (const chunk of chunks(names, 50)) {
+        const q = await api(wiki, {
+          action: "query",
+          titles: chunk.map((n) => `${n}/${vo}`).join("|"),
+        });
+        for (const p of Object.values<any>(q.query.pages))
+          if (!("missing" in p)) found.add(p.title.split("/")[0]);
+      }
+      const image = new Map<string, string>();
+      const gender = new Map<string, Gender>();
+      for (const chunk of chunks([...found], 50)) {
+        const q = await api(wiki, {
+          action: "query",
+          titles: chunk.join("|"),
+          prop: "pageimages|categories",
+          piprop: "thumbnail",
+          pithumbsize: "480",
+          clcategories: GENDER_CATS,
+          cllimit: "max",
+        });
+        for (const p of Object.values<any>(q.query.pages)) {
+          if (p.thumbnail) image.set(p.title, p.thumbnail.source);
+          const g = new Set<Gender>(
+            (p.categories ?? []).map((c: any) => (/Female/.test(c.title) ? "f" : "m")),
+          );
+          if (g.size === 1) gender.set(p.title, [...g][0]!); // both (Traveler) stays unknown
         }
-        const image = new Map<string, string>();
-        const gender = new Map<string, Gender>();
-        for (const chunk of chunks([...found], 50)) {
-          const q = await api(wiki, {
-            action: "query",
-            titles: chunk.join("|"),
-            prop: "pageimages|categories",
-            piprop: "thumbnail",
-            pithumbsize: "480",
-            clcategories: GENDER_CATS,
-            cllimit: "max",
-          });
-          for (const p of Object.values<any>(q.query.pages)) {
-            if (p.thumbnail) image.set(p.title, p.thumbnail.source);
-            const g = new Set<Gender>(
-              (p.categories ?? []).map((c: any) => (/Female/.test(c.title) ? "f" : "m")),
-            );
-            if (g.size === 1) gender.set(p.title, [...g][0]!); // both (Traveler) stays unknown
-          }
+      }
+      // No gender categories (HSR): count pronouns in the third-person Lore subpage.
+      const unknown = [...found].filter((n) => !gender.has(n));
+      for (const chunk of chunks(unknown, 50)) {
+        const q = await api(wiki, {
+          action: "query",
+          titles: chunk.map((n) => `${n}/Lore`).join("|"),
+          prop: "revisions",
+          rvprop: "content",
+          rvslots: "main",
+        });
+        for (const p of Object.values<any>(q.query.pages)) {
+          const t: string = p.revisions?.[0].slots.main["*"] ?? "";
+          const f = t.match(/\b(she|her|hers|herself)\b/gi)?.length ?? 0;
+          const m = t.match(/\b(he|him|his|himself)\b/gi)?.length ?? 0;
+          const name = p.title.replace(/\/Lore$/, "");
+          if (f + m < 5) continue; // too little prose (Trailblazer is both)
+          if (f > m * 2) gender.set(name, "f");
+          else if (m > f * 2) gender.set(name, "m");
         }
-        // No gender categories (HSR): count pronouns in the third-person Lore subpage.
-        const unknown = [...found].filter((n) => !gender.has(n));
-        for (const chunk of chunks(unknown, 50)) {
-          const q = await api(wiki, {
-            action: "query",
-            titles: chunk.map((n) => `${n}/Lore`).join("|"),
-            prop: "revisions",
-            rvprop: "content",
-            rvslots: "main",
-          });
-          for (const p of Object.values<any>(q.query.pages)) {
-            const t: string = p.revisions?.[0].slots.main["*"] ?? "";
-            const f = t.match(/\b(she|her|hers|herself)\b/gi)?.length ?? 0;
-            const m = t.match(/\b(he|him|his|himself)\b/gi)?.length ?? 0;
-            const name = p.title.replace(/\/Lore$/, "");
-            if (f + m < 5) continue; // too little prose (Trailblazer is both)
-            if (f > m * 2) gender.set(name, "f");
-            else if (m > f * 2) gender.set(name, "m");
-          }
-        }
-        return [...found].sort().map((name) => ({
-          name,
-          image: image.get(name) ?? null,
-          gender: gender.get(name) ?? null,
-        }));
-      },
-      undefined,
-      kv,
-    ),
+      }
+      return [...found].sort().map((name) => ({
+        name,
+        image: image.get(name) ?? null,
+        gender: gender.get(name) ?? null,
+      }));
+    },
+    undefined,
+    kv,
   );
+
+/** Forget a game's roster (KV or file) and this isolate's memoized voice lines, so both refetch from the wiki. */
+export async function flush(wiki: WikiId, kv?: Kv) {
+  const name = `characters-${wiki}`;
+  await (kv ? kv.delete(name) : rm(`data/cache/${name}.json`, { force: true }));
+  for (const key of cache.keys()) if (key.startsWith(`lines:${wiki}:`)) cache.delete(key);
+}
 
 const text = (el: cheerio.Cheerio<any>) => el.text().replace(/\s+/g, " ").trim();
 
