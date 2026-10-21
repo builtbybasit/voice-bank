@@ -1,4 +1,4 @@
-import { useLocalStorage, useMediaControls } from "@vueuse/core";
+import { useColorMode, useLocalStorage, useMediaControls } from "@vueuse/core";
 import { computed, reactive, ref, watch } from "vue";
 import { createRouter, createWebHashHistory } from "vue-router";
 import CharacterGrid from "./components/CharacterGrid.vue";
@@ -49,6 +49,11 @@ export const state = reactive({
 });
 export const selection = useLocalStorage<Item[]>("voicebank:selection", []);
 export const showImages = useLocalStorage("voicebank:images", false);
+export const theme = useColorMode({
+  attribute: "data-theme",
+  initialValue: "dark",
+  storageKey: "voicebank:theme",
+});
 
 export const wiki = () => state.wikis.find((w) => w.id === state.wiki);
 export const media = (wikiId: string, url: string) =>

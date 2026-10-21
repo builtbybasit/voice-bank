@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { AudioLines, ImageIcon, ImageOffIcon, Library } from "@lucide/vue";
+import { AudioLines, ImageIcon, ImageOffIcon, Library, Moon, Sun } from "@lucide/vue";
 import Player from "./components/Player.vue";
 import SampleTray from "./components/SampleTray.vue";
-import { go, selection, showImages, state } from "./store.ts";
+import { go, selection, showImages, state, theme } from "./store.ts";
 </script>
 
 <template>
@@ -21,6 +21,13 @@ import { go, selection, showImages, state } from "./store.ts";
         <i></i>{{ w.label }}
       </button>
     </nav>
+    <button
+      class="tray-btn"
+      :aria-label="theme === 'dark' ? 'Light mode' : 'Dark mode'"
+      @click="theme = theme === 'dark' ? 'light' : 'dark'"
+    >
+      <component :is="theme === 'dark' ? Sun : Moon" :size="18" />
+    </button>
     <button
       class="tray-btn"
       :class="{ has: showImages }"

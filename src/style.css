@@ -11,7 +11,19 @@
   --font: "Inter", system-ui, -apple-system, sans-serif;
   --serif: "Instrument Serif", Georgia, serif;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ink: var(--accent);
   color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f6f5f1;
+  --bg-2: #efeee9;
+  --panel: #ffffff;
+  --panel-2: #f0efea;
+  --line: #e0ded6;
+  --fg: #16171d;
+  --muted: #696d7b;
+  --ink: color-mix(in oklab, var(--accent) 65%, #000);
+  color-scheme: light;
 }
 * {
   box-sizing: border-box;
@@ -185,7 +197,7 @@ main.with-player {
 }
 .eyebrow {
   margin: 0 0 4px;
-  color: var(--accent);
+  color: var(--ink);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -201,7 +213,7 @@ main.with-player {
   font-style: italic;
   font-weight: 400;
   font-size: 1.12em;
-  color: var(--accent);
+  color: var(--ink);
 }
 .tools {
   display: flex;
@@ -297,6 +309,7 @@ kbd {
   font-weight: 600;
   font-size: 14px;
   letter-spacing: -0.01em;
+  color: #eef0f6;
   background: linear-gradient(to top, rgb(8 9 12 / 0.95), rgb(8 9 12 / 0.6) 50%, transparent);
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
 }
@@ -346,7 +359,11 @@ kbd {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(100deg, rgb(10 11 15 / 0.9), rgb(10 11 15 / 0.4));
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--bg) 90%, transparent),
+    color-mix(in oklab, var(--bg) 40%, transparent)
+  );
 }
 .hero-body {
   display: flex;
@@ -579,7 +596,7 @@ kbd {
 }
 .line.keep .tag {
   border-color: color-mix(in oklab, var(--accent) 60%, var(--line));
-  color: var(--accent);
+  color: var(--ink);
 }
 .line p {
   margin: 2px 0 0;
