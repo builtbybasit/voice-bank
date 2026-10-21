@@ -77,10 +77,11 @@ export const toggle = (line: Line) => {
 
 /** One <audio autoplay> lives in Player.vue; VueUse keeps playing/currentTime/duration in sync with it. */
 export const audioEl = ref<HTMLAudioElement>();
-export const { playing, currentTime, duration, ended } = useMediaControls(audioEl, {
+export const { playing, currentTime, duration, ended, waiting } = useMediaControls(audioEl, {
   src: computed(() => (state.playing ? media(state.playing.wiki, state.playing.url) : "")),
 });
 watch(ended, (e) => e && step(1));
+export const isLoading = (url: string) => state.playing?.url === url && waiting.value;
 
 /** Playing snapshots the current character's lines as the queue, so prev/next keep working after navigating away. */
 /** A plain Line comes from the current character page; an Item (sample set) carries its own wiki/character/lang. */

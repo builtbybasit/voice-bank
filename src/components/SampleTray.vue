@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Download, FolderOpen, Pause, Play, Trash2, X } from "@lucide/vue";
+import { Download, FolderOpen, LoaderCircle, Pause, Play, Trash2, X } from "@lucide/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { createParser } from "eventsource-parser";
 import { computed, ref } from "vue";
-import { LANG_LABEL, play, playing, selection, state, type Item } from "../store.ts";
+import { LANG_LABEL, isLoading, play, playing, selection, state, type Item } from "../store.ts";
 
 const groups = computed(() =>
   Map.groupBy(selection.value, (i) => `${i.wiki}/${i.character}/${i.lang}`)
@@ -75,7 +75,8 @@ async function exportAll() {
                 :aria-label="state.playing?.url === i.url && playing ? 'Pause' : 'Play'"
                 @click="play(i, g)"
               >
-                <Pause v-if="state.playing?.url === i.url && playing" :size="14" />
+                <LoaderCircle v-if="isLoading(i.url)" class="spin" :size="14" />
+                <Pause v-else-if="state.playing?.url === i.url && playing" :size="14" />
                 <Play v-else :size="14" />
               </button>
               <span

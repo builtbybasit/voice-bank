@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Pause, Play, SkipBack, SkipForward, X } from "@lucide/vue";
+import { LoaderCircle, Pause, Play, SkipBack, SkipForward, X } from "@lucide/vue";
 import { onKeyStroke } from "@vueuse/core";
-import { audioEl, currentTime, duration, playing, state, step } from "../store.ts";
+import { audioEl, currentTime, duration, playing, state, step, waiting } from "../store.ts";
 
 const fmt = (s: number) =>
   Number.isFinite(s)
@@ -23,7 +23,7 @@ onKeyStroke(["ArrowUp", "k"], (e) => !typing(e) && (e.preventDefault(), step(-1)
 <template>
   <Transition name="rise">
     <footer v-if="state.playing" class="player">
-      <audio ref="audioEl" autoplay></audio>
+      <audio ref="audioEl" autoplay @error="waiting = false"></audio>
       <div class="track" @click="seek">
         <div
           class="fill"
@@ -38,7 +38,8 @@ onKeyStroke(["ArrowUp", "k"], (e) => !typing(e) && (e.preventDefault(), step(-1)
         <div class="controls">
           <button aria-label="Previous" @click="step(-1)"><SkipBack :size="18" /></button>
           <button class="main" :aria-label="playing ? 'Pause' : 'Play'" @click="playing = !playing">
-            <Pause v-if="playing" :size="20" />
+            <LoaderCircle v-if="waiting" class="spin" :size="20" />
+            <Pause v-else-if="playing" :size="20" />
             <Play v-else :size="20" />
           </button>
           <button aria-label="Next" @click="step(1)"><SkipForward :size="18" /></button>

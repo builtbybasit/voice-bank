@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, CheckCheck, Pause, Play, Plus, Sparkles } from "@lucide/vue";
+import {
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  LoaderCircle,
+  Pause,
+  Play,
+  Plus,
+  Sparkles,
+} from "@lucide/vue";
 import { computed } from "vue";
 import {
   LANG_LABEL,
   curate,
   go,
+  isLoading,
   isSelected,
   picks,
   play,
@@ -130,7 +140,8 @@ const jump = (id: string) =>
           @click="play(l)"
         >
           <button class="play" :aria-label="isPlaying(l) ? 'Pause' : 'Play'" @click.stop="play(l)">
-            <Pause v-if="isPlaying(l)" :size="16" />
+            <LoaderCircle v-if="isLoading(l.url)" class="spin" :size="16" />
+            <Pause v-else-if="isPlaying(l)" :size="16" />
             <Play v-else :size="16" />
           </button>
           <div class="body">
