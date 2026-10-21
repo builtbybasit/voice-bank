@@ -13,7 +13,6 @@ import { computed } from "vue";
 import {
   LANG_LABEL,
   curate,
-  go,
   isLoading,
   isSelected,
   picks,
@@ -25,7 +24,8 @@ import {
   toggle,
   wiki,
   type Line,
-} from "../store.ts";
+} from "@/store.ts";
+import { go } from "@/router.ts";
 
 const local = import.meta.env.DEV; // curate shells out to the claude CLI, so only under vp dev
 const me = computed(() => state.characters[state.wiki]?.find((c) => c.name === state.character));

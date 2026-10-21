@@ -11,7 +11,7 @@ import {
   selection,
   state,
   type Item,
-} from "../store.ts";
+} from "@/store.ts";
 
 const groups = computed(() =>
   Map.groupBy(selection.value, (i) => `${i.wiki}/${i.character}/${i.lang}`)

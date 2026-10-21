@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { AudioLines, ImageIcon, ImageOffIcon, Library, Moon, RefreshCw, Sun } from "@lucide/vue";
-import Player from "./components/Player.vue";
-import SampleTray from "./components/SampleTray.vue";
-import { flush, go, selection, showImages, state, theme } from "./store.ts";
+import Player from "@/components/Player.vue";
+import SampleTray from "@/components/SampleTray.vue";
+import { go } from "@/router.ts";
+import { flush, selection, showImages, state, theme } from "@/store.ts";
 </script>
 
 <template>

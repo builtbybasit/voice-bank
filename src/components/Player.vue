@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { LoaderCircle, Pause, Play, SkipBack, SkipForward, X } from "@lucide/vue";
 import { onKeyStroke } from "@vueuse/core";
-import { audioEl, currentTime, duration, playing, state, step, waiting } from "../store.ts";
+import { audioEl, currentTime, duration, playing, state, step, waiting } from "@/store.ts";
 
 const fmt = (s: number) =>
   Number.isFinite(s)

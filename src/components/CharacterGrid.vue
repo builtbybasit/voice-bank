@@ -2,7 +2,8 @@
 import { Search } from "@lucide/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { computed, ref } from "vue";
-import { go, portrait, showImages, state, wiki } from "../store.ts";
+import { go } from "@/router.ts";
+import { portrait, showImages, state, wiki } from "@/store.ts";
 
 const GENDERS = [
   ["", "All"],

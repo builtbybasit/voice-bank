@@ -1,8 +1,6 @@
 import { useColorMode, useLocalStorage, useMediaControls } from "@vueuse/core";
 import { computed, reactive, ref, watch } from "vue";
-import { createRouter, createWebHashHistory } from "vue-router";
-import CharacterGrid from "./components/CharacterGrid.vue";
-import CharacterView from "./components/CharacterView.vue";
+import { router } from "@/router.ts";
 
 export type Wiki = { id: string; label: string; accent: string; langs: string[] };
 export type Character = { name: string; image: string | null; gender: "m" | "f" | null };
@@ -16,22 +14,6 @@ export const LANG_LABEL: Record<string, string> = {
   zh: "中文",
   ko: "한국어",
 };
-
-export const router = createRouter({
-  history: createWebHashHistory(),
-  scrollBehavior: () => ({ top: 0 }),
-  routes: [
-    { path: "/", redirect: "/genshin" },
-    { path: "/:wiki", name: "grid", component: CharacterGrid },
-    { path: "/:wiki/:name", name: "character", component: CharacterView },
-  ],
-});
-export const go = (wiki: string, name = "", lang = "en") =>
-  router.push({
-    name: name ? "character" : "grid",
-    params: name ? { wiki, name } : { wiki },
-    query: lang === "en" ? {} : { lang },
-  });
 
 export const state = reactive({
   wikis: [] as Wiki[],
