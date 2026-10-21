@@ -53,8 +53,26 @@ const GENDER_CATS = ["Agents", "Resonators", "Characters"]
 const cache = new Map<string, Promise<unknown>>();
 const DISK_TTL = 24 * 60 * 60 * 1000;
 
-/** JSON file cache under data/cache, refreshed when older than DISK_TTL. Delete the file to force a refetch. */
-export async function disk<T>(name: string, fn: () => Promise<T>, ttl = DISK_TTL): Promise<T> {
+/** The slice of Workers KV that disk() uses; the binding is CACHE in cloudflare.config.ts. */
+export type Kv = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, opts: { expirationTtl: number }): Promise<void>;
+};
+
+/** JSON cache refreshed when older than ttl: Workers KV when deployed, else files under data/cache. Delete the key or file to force a refetch. */
+export async function disk<T>(
+  name: string,
+  fn: () => Promise<T>,
+  ttl = DISK_TTL,
+  kv?: Kv,
+): Promise<T> {
+  if (kv) {
+    const hit = await kv.get(name);
+    if (hit) return JSON.parse(hit);
+    const value = await fn();
+    await kv.put(name, JSON.stringify(value), { expirationTtl: ttl / 1000 });
+    return value;
+  }
   const path = `data/cache/${name}.json`;
   const fresh = await stat(path).then(
     (s) => Date.now() - s.mtimeMs < ttl,
@@ -62,10 +80,8 @@ export async function disk<T>(name: string, fn: () => Promise<T>, ttl = DISK_TTL
   );
   if (fresh) return JSON.parse(await readFile(path, "utf8"));
   const value = await fn();
-  // Workers' filesystem is read-only: the write fails there and memo() caches per isolate instead.
-  await mkdir("data/cache", { recursive: true })
-    .then(() => writeFile(path, JSON.stringify(value)))
-    .catch(() => {});
+  await mkdir("data/cache", { recursive: true });
+  await writeFile(path, JSON.stringify(value));
   return value;
 }
 
@@ -93,69 +109,74 @@ const chunks = <T>(a: T[], n: number) =>
   Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
 /** Characters on the list page that actually have a voice page, with a portrait. */
-export const characters = (wiki: WikiId) =>
+export const characters = (wiki: WikiId, kv?: Kv) =>
   memo(`chars:${wiki}`, () =>
-    disk(`characters-${wiki}`, async (): Promise<Character[]> => {
-      const { list, vo } = WIKIS[wiki];
-      const data = await api(wiki, { action: "parse", page: list, prop: "links" });
-      const names: string[] = data.parse.links
-        .filter((l: any) => l.ns === 0 && "exists" in l)
-        .map((l: any) => l["*"]);
-      const found = new Set<string>();
-      for (const chunk of chunks(names, 50)) {
-        const q = await api(wiki, {
-          action: "query",
-          titles: chunk.map((n) => `${n}/${vo}`).join("|"),
-        });
-        for (const p of Object.values<any>(q.query.pages))
-          if (!("missing" in p)) found.add(p.title.split("/")[0]);
-      }
-      const image = new Map<string, string>();
-      const gender = new Map<string, Gender>();
-      for (const chunk of chunks([...found], 50)) {
-        const q = await api(wiki, {
-          action: "query",
-          titles: chunk.join("|"),
-          prop: "pageimages|categories",
-          piprop: "thumbnail",
-          pithumbsize: "480",
-          clcategories: GENDER_CATS,
-          cllimit: "max",
-        });
-        for (const p of Object.values<any>(q.query.pages)) {
-          if (p.thumbnail) image.set(p.title, p.thumbnail.source);
-          const g = new Set<Gender>(
-            (p.categories ?? []).map((c: any) => (/Female/.test(c.title) ? "f" : "m")),
-          );
-          if (g.size === 1) gender.set(p.title, [...g][0]!); // both (Traveler) stays unknown
+    disk(
+      `characters-${wiki}`,
+      async (): Promise<Character[]> => {
+        const { list, vo } = WIKIS[wiki];
+        const data = await api(wiki, { action: "parse", page: list, prop: "links" });
+        const names: string[] = data.parse.links
+          .filter((l: any) => l.ns === 0 && "exists" in l)
+          .map((l: any) => l["*"]);
+        const found = new Set<string>();
+        for (const chunk of chunks(names, 50)) {
+          const q = await api(wiki, {
+            action: "query",
+            titles: chunk.map((n) => `${n}/${vo}`).join("|"),
+          });
+          for (const p of Object.values<any>(q.query.pages))
+            if (!("missing" in p)) found.add(p.title.split("/")[0]);
         }
-      }
-      // No gender categories (HSR): count pronouns in the third-person Lore subpage.
-      const unknown = [...found].filter((n) => !gender.has(n));
-      for (const chunk of chunks(unknown, 50)) {
-        const q = await api(wiki, {
-          action: "query",
-          titles: chunk.map((n) => `${n}/Lore`).join("|"),
-          prop: "revisions",
-          rvprop: "content",
-          rvslots: "main",
-        });
-        for (const p of Object.values<any>(q.query.pages)) {
-          const t: string = p.revisions?.[0].slots.main["*"] ?? "";
-          const f = t.match(/\b(she|her|hers|herself)\b/gi)?.length ?? 0;
-          const m = t.match(/\b(he|him|his|himself)\b/gi)?.length ?? 0;
-          const name = p.title.replace(/\/Lore$/, "");
-          if (f + m < 5) continue; // too little prose (Trailblazer is both)
-          if (f > m * 2) gender.set(name, "f");
-          else if (m > f * 2) gender.set(name, "m");
+        const image = new Map<string, string>();
+        const gender = new Map<string, Gender>();
+        for (const chunk of chunks([...found], 50)) {
+          const q = await api(wiki, {
+            action: "query",
+            titles: chunk.join("|"),
+            prop: "pageimages|categories",
+            piprop: "thumbnail",
+            pithumbsize: "480",
+            clcategories: GENDER_CATS,
+            cllimit: "max",
+          });
+          for (const p of Object.values<any>(q.query.pages)) {
+            if (p.thumbnail) image.set(p.title, p.thumbnail.source);
+            const g = new Set<Gender>(
+              (p.categories ?? []).map((c: any) => (/Female/.test(c.title) ? "f" : "m")),
+            );
+            if (g.size === 1) gender.set(p.title, [...g][0]!); // both (Traveler) stays unknown
+          }
         }
-      }
-      return [...found].sort().map((name) => ({
-        name,
-        image: image.get(name) ?? null,
-        gender: gender.get(name) ?? null,
-      }));
-    }),
+        // No gender categories (HSR): count pronouns in the third-person Lore subpage.
+        const unknown = [...found].filter((n) => !gender.has(n));
+        for (const chunk of chunks(unknown, 50)) {
+          const q = await api(wiki, {
+            action: "query",
+            titles: chunk.map((n) => `${n}/Lore`).join("|"),
+            prop: "revisions",
+            rvprop: "content",
+            rvslots: "main",
+          });
+          for (const p of Object.values<any>(q.query.pages)) {
+            const t: string = p.revisions?.[0].slots.main["*"] ?? "";
+            const f = t.match(/\b(she|her|hers|herself)\b/gi)?.length ?? 0;
+            const m = t.match(/\b(he|him|his|himself)\b/gi)?.length ?? 0;
+            const name = p.title.replace(/\/Lore$/, "");
+            if (f + m < 5) continue; // too little prose (Trailblazer is both)
+            if (f > m * 2) gender.set(name, "f");
+            else if (m > f * 2) gender.set(name, "m");
+          }
+        }
+        return [...found].sort().map((name) => ({
+          name,
+          image: image.get(name) ?? null,
+          gender: gender.get(name) ?? null,
+        }));
+      },
+      undefined,
+      kv,
+    ),
   );
 
 const text = (el: cheerio.Cheerio<any>) => el.text().replace(/\s+/g, " ").trim();

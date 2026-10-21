@@ -1,12 +1,20 @@
 import { Hono } from "hono";
 import { curate } from "./curate.ts";
-import { WIKIS, characters, fetchMedia, voiceLines, type Lang, type WikiId } from "./fandom.ts";
+import {
+  WIKIS,
+  characters,
+  fetchMedia,
+  voiceLines,
+  type Kv,
+  type Lang,
+  type WikiId,
+} from "./fandom.ts";
 
 try {
   process.loadEnvFile(); // .env is optional; see .env.example
 } catch {}
 
-const app = new Hono();
+const app = new Hono<{ Bindings: { CACHE?: Kv } }>(); // CACHE is unset under vp dev, so disk() uses files
 const wiki = (id: string) => (id in WIKIS ? (id as WikiId) : null);
 const slug = (s: string) => s.replace(/[^\w-]+/g, "_").replace(/^_|_$/g, "");
 
@@ -23,7 +31,7 @@ app.get("/api/wikis", (c) =>
 
 app.get("/api/:wiki/characters", async (c) => {
   const w = wiki(c.req.param("wiki"));
-  return w ? c.json(await characters(w)) : c.notFound();
+  return w ? c.json(await characters(w, c.env.CACHE)) : c.notFound();
 });
 
 // Buffered so Range requests work: Chrome needs them to read an Ogg's duration. Clips are a few hundred KB at most.

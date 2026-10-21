@@ -21,6 +21,7 @@ Deploys to Cloudflare Workers with the [`cf` CLI](https://developers.cloudflare.
 
 ```sh
 cf auth login
+cf kv namespaces create --title voicebank-cache   # once; put its id in .env as CACHE_KV_ID
 vp run deploy
 ```
 
@@ -55,7 +56,7 @@ Each export zips the whole selection, so unzipping over an earlier export replac
 - **UI** (`src/`, Vue 3): vue-router for `#/{game}/{Character}?lang=ja`, VueUse for the audio controls and persisted selection, lucide icons.
 - **Curation** runs `claude -p --json-schema` from the server, so it uses your Claude Code login and subscription rather than API credits. Requires Claude Code installed and logged in. Verdicts are cached forever in `data/cache/curate-*.json`; delete one to redo a character. Model, effort and timeout come from `.env` (copy `.env.example`).
 - **Gender** comes from wiki categories (Genshin, ZZZ, WuWa). Honkai: Star Rail has none, so it is inferred from pronoun counts on the character's Lore page; a few characters (Trailblazer, Anaxa) stay unclassified and only show under "All".
-- **Caches**: character rosters are stored in `data/cache/characters-{game}.json` for 24 hours. Delete a file to refetch sooner, for example after a new character releases. Voice lines are cached in memory for the server's lifetime. On Workers there is no disk, so both live only in each isolate's memory.
+- **Caches**: character rosters are stored in `data/cache/characters-{game}.json` for 24 hours. Delete a file to refetch sooner, for example after a new character releases. Voice lines are cached in memory for the server's lifetime. On Workers, rosters go to the `CACHE` KV namespace instead (same 24 hours; `cf kv keys delete` to refetch) and voice lines live in each isolate's memory.
 
 Lines without a transcript on the wiki, such as combat grunts, are dropped.
 
