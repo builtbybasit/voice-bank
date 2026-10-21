@@ -31,3 +31,6 @@ data/
 .playwright-mcp/
 
 voices
+.cloudflare/
+.wrangler/
+.dev.vars*

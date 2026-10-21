@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { Download, FolderOpen, LoaderCircle, Pause, Play, Trash2, X } from "@lucide/vue";
-import { useLocalStorage } from "@vueuse/core";
-import { createParser } from "eventsource-parser";
+import { Download, LoaderCircle, Pause, Play, Trash2, X } from "@lucide/vue";
+import { strToU8, zipSync } from "fflate";
 import { computed, ref } from "vue";
-import { LANG_LABEL, isLoading, play, playing, selection, state, type Item } from "../store.ts";
+import {
+  LANG_LABEL,
+  isLoading,
+  media,
+  play,
+  playing,
+  selection,
+  state,
+  type Item,
+} from "../store.ts";
 
 const groups = computed(() =>
   Map.groupBy(selection.value, (i) => `${i.wiki}/${i.character}/${i.lang}`)
@@ -13,36 +21,92 @@ const groups = computed(() =>
 const remove = (i: Item) => selection.value.splice(selection.value.indexOf(i), 1);
 const label = (id: string) => state.wikis.find((w) => w.id === id)?.label ?? id;
 
-const progress = ref<{ done: number; total: number; file?: string; url?: string } | null>(null);
+const progress = ref<{ done: number; total: number; file?: string } | null>(null);
 const result = ref("");
-/** Exported WAV path per clip url, so each exported row can reveal its file. */
-const exported = useLocalStorage<Record<string, string>>("voicebank:exported", {});
-const reveal = (file: string) =>
-  fetch("/api/reveal", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ file }),
-  });
+let zipUrl = "";
 
+const slug = (s: string) => s.replace(/[^\w-]+/g, "_").replace(/^_|_$/g, "");
+const hash = async (s: string) =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(s)))]
+    .slice(0, 4)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+/** 24 kHz mono 16-bit WAV, what ffmpeg -ar 24000 -ac 1 wrote. decodeAudioData resamples to the context's rate. */
+async function wav(ogg: ArrayBuffer) {
+  const buf = await new OfflineAudioContext(1, 1, 24000).decodeAudioData(ogg);
+  const chans = Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c));
+  const n = buf.length;
+  const v = new DataView(new ArrayBuffer(44 + n * 2));
+  const ascii = (at: number, s: string) =>
+    [...s].forEach((ch, i) => v.setUint8(at + i, ch.charCodeAt(0)));
+  ascii(0, "RIFF");
+  v.setUint32(4, 36 + n * 2, true);
+  ascii(8, "WAVEfmt ");
+  v.setUint32(16, 16, true); // fmt chunk size
+  v.setUint16(20, 1, true); // PCM
+  v.setUint16(22, 1, true); // mono
+  v.setUint32(24, 24000, true);
+  v.setUint32(28, 48000, true); // byte rate
+  v.setUint16(32, 2, true); // block align
+  v.setUint16(34, 16, true); // bits per sample
+  ascii(36, "data");
+  v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) {
+    const s = chans.reduce((a, d) => a + d[i]!, 0) / chans.length;
+    v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s)) * 0x7fff, true);
+  }
+  return new Uint8Array(v.buffer);
+}
+
+/** Same layout the old server export wrote under data/, zipped: unzip in the project root to get data/{game}/{Character}/{lang}/. */
 async function exportAll() {
-  progress.value = { done: 0, total: selection.value.length };
+  const items = selection.value.slice();
+  const files: Record<string, Uint8Array> = {};
+  const meta: Record<string, string> = {};
   result.value = "";
-  const res = await fetch("/api/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items: selection.value }),
-  });
-  const parser = createParser({
-    onEvent: (e) => {
-      progress.value = JSON.parse(e.data);
-      const { url, file } = progress.value ?? {};
-      if (url && file) exported.value[url] = file;
-    },
-  });
-  const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
-  for (let r = await reader.read(); !r.done; r = await reader.read()) parser.feed(r.value);
-  result.value = `${progress.value?.done} WAV files + metadata.jsonl written under data/`;
-  progress.value = null;
+  progress.value = { done: 0, total: items.length };
+  try {
+    for (const [done, it] of items.entries()) {
+      const dir = `data/${it.wiki}/${slug(it.character)}/${it.lang}`;
+      const file = `${dir}/${slug(it.title)}-${await hash(it.url)}.wav`;
+      const res = await fetch(media(it.wiki, it.url));
+      if (!res.ok) throw new Error(`${it.title}: ${res.status}`);
+      files[file] = await wav(await res.arrayBuffer());
+      meta[dir] =
+        (meta[dir] ?? "") +
+        JSON.stringify({
+          audio: file,
+          text: it.text,
+          title: it.title,
+          character: it.character,
+          game: it.wiki,
+          lang: it.lang,
+        }) +
+        "\n";
+      progress.value = { done: done + 1, total: items.length, file };
+      await new Promise((r) => setTimeout(r, 300)); // ponytail: fixed sleep; token bucket if Fandom starts 429ing
+    }
+    for (const [dir, m] of Object.entries(meta)) files[`${dir}/metadata.jsonl`] = strToU8(m);
+    // Revoke only the previous zip: revoking this one before a Save As dialog closes makes the
+    // browser fall back to the blob's UUID as the filename and fail the download.
+    URL.revokeObjectURL(zipUrl);
+    zipUrl = URL.createObjectURL(
+      new Blob([zipSync(files, { level: 0 })], { type: "application/zip" }),
+    );
+    const a = Object.assign(document.createElement("a"), {
+      href: zipUrl,
+      download: "voicebank.zip",
+    });
+    document.body.append(a); // Firefox ignores clicks on detached links
+    a.click();
+    a.remove();
+    result.value = `${items.length} WAV files + metadata.jsonl downloaded as voicebank.zip`;
+  } catch (e) {
+    result.value = `Export failed: ${(e as Error).message}`;
+  } finally {
+    progress.value = null;
+  }
 }
 </script>
 
@@ -83,14 +147,6 @@ async function exportAll() {
                 ><b>{{ i.title }}</b
                 ><small>{{ i.text }}</small></span
               >
-              <button
-                v-if="exported[i.url]"
-                class="icon reveal"
-                aria-label="Show in folder"
-                @click="reveal(exported[i.url])"
-              >
-                <FolderOpen :size="14" />
-              </button>
               <button class="icon" aria-label="Remove" @click="remove(i)"><X :size="14" /></button>
             </li>
           </ul>

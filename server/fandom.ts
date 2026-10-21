@@ -1,5 +1,5 @@
 // Fandom wikis are MediaWiki: use api.php, never scrape blind HTML.
-import * as cheerio from "cheerio";
+import * as cheerio from "cheerio/slim"; // the full entry imports undici, which Workers lack
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 
 export const WIKIS = {
@@ -62,8 +62,10 @@ export async function disk<T>(name: string, fn: () => Promise<T>, ttl = DISK_TTL
   );
   if (fresh) return JSON.parse(await readFile(path, "utf8"));
   const value = await fn();
-  await mkdir("data/cache", { recursive: true });
-  await writeFile(path, JSON.stringify(value));
+  // Workers' filesystem is read-only: the write fails there and memo() caches per isolate instead.
+  await mkdir("data/cache", { recursive: true })
+    .then(() => writeFile(path, JSON.stringify(value)))
+    .catch(() => {});
   return value;
 }
 

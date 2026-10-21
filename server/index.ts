@@ -1,9 +1,4 @@
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { access, appendFile, mkdir } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
 import { curate } from "./curate.ts";
 import { WIKIS, characters, fetchMedia, voiceLines, type Lang, type WikiId } from "./fandom.ts";
 
@@ -14,11 +9,6 @@ try {
 const app = new Hono();
 const wiki = (id: string) => (id in WIKIS ? (id as WikiId) : null);
 const slug = (s: string) => s.replace(/[^\w-]+/g, "_").replace(/^_|_$/g, "");
-const exists = (p: string) =>
-  access(p).then(
-    () => true,
-    () => false,
-  );
 
 app.get("/api/wikis", (c) =>
   c.json(
@@ -70,7 +60,7 @@ app.get("/api/:wiki/:name/lines", async (c) => {
     : c.notFound();
 });
 
-/** Ask Claude (via `claude -p`) which lines make good cloning samples; returns one verdict per line, same order. */
+/** Ask Claude (via `claude -p`, so local `vp dev` only; the UI hides it in builds) which lines make good cloning samples; returns one verdict per line, same order. */
 app.post("/api/:wiki/:name/curate", async (c) => {
   const w = wiki(c.req.param("wiki"));
   if (!w) return c.notFound();
@@ -78,71 +68,6 @@ app.post("/api/:wiki/:name/curate", async (c) => {
   const lang = (c.req.query("lang") ?? "en") as Lang;
   const lines = await voiceLines(w, name, lang);
   return c.json(await curate(`${w}-${slug(name)}-${lang}`, lines));
-});
-
-type Item = {
-  wiki: WikiId;
-  character: string;
-  lang: Lang;
-  title: string;
-  url: string;
-  text: string;
-};
-
-/** Convert each selected clip to 24 kHz mono WAV + metadata.jsonl, the shape XTTS / F5 / Fish ingest. Progress over SSE. */
-app.post("/api/export", async (c) => {
-  const { items } = (await c.req.json()) as { items: Item[] };
-  return streamSSE(c, async (stream) => {
-    let done = 0;
-    for (const it of items) {
-      const w = wiki(it.wiki);
-      if (!w) continue;
-      const dir = `data/${w}/${slug(it.character)}/${it.lang}`;
-      const wav = `${dir}/${slug(it.title)}-${createHash("md5").update(it.url).digest("hex").slice(0, 8)}.wav`;
-      if (!(await exists(wav))) {
-        await mkdir(dir, { recursive: true });
-        const ogg = Buffer.from(await (await fetchMedia(w, it.url)).arrayBuffer());
-        await new Promise<void>((res, rej) => {
-          const p = execFile(
-            "ffmpeg",
-            ["-y", "-loglevel", "error", "-i", "pipe:0", "-ar", "24000", "-ac", "1", wav],
-            (e) => (e ? rej(e) : res()),
-          );
-          p.stdin!.end(ogg);
-        });
-        await appendFile(
-          `${dir}/metadata.jsonl`,
-          JSON.stringify({
-            audio: wav,
-            text: it.text,
-            title: it.title,
-            character: it.character,
-            game: w,
-            lang: it.lang,
-          }) + "\n",
-        );
-        await new Promise((r) => setTimeout(r, 300)); // ponytail: fixed sleep; token bucket if Fandom starts 429ing
-      }
-      await stream.writeSSE({
-        data: JSON.stringify({ done: ++done, total: items.length, file: wav, url: it.url }),
-      });
-    }
-    await stream.writeSSE({ event: "end", data: JSON.stringify({ done, total: items.length }) });
-  });
-});
-
-/** Reveal an exported file in the OS file manager (the server runs locally, so this is the user's machine). */
-app.post("/api/reveal", async (c) => {
-  const abs = resolve(((await c.req.json()) as { file: string }).file);
-  if (!abs.startsWith(resolve("data") + sep) || !(await exists(abs))) return c.body(null, 400);
-  const [cmd, ...args] =
-    process.platform === "darwin"
-      ? ["open", "-R", abs]
-      : process.platform === "win32"
-        ? ["explorer", `/select,${abs}`]
-        : ["xdg-open", dirname(abs)];
-  execFile(cmd, args, () => {}); // explorer exits 1 even on success
-  return c.body(null, 204);
 });
 
 export default app;

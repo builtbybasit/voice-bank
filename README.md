@@ -6,7 +6,7 @@ Supported wikis: Genshin Impact, Honkai: Star Rail, Zenless Zone Zero, Wuthering
 
 ## Run
 
-Requires [Vite+](https://viteplus.dev) (`vp`) and `ffmpeg` on PATH.
+Requires [Vite+](https://viteplus.dev) (`vp`).
 
 ```sh
 vp install
@@ -15,15 +15,26 @@ vp dev
 
 Open http://localhost:5173. `vp check --fix` formats, lints and type checks.
 
+## Deploy
+
+Deploys to Cloudflare Workers with the [`cf` CLI](https://developers.cloudflare.com/cf/) (Node 22.18+, not Bun):
+
+```sh
+cf auth login
+vp run deploy
+```
+
+`vp preview` runs the production build locally in workerd. "Curate with Claude" is local only: it shells out to the `claude` CLI, so builds hide the button.
+
 ## Use
 
 1. Pick a game in the top bar, then a character from the grid. The All/Female/Male toggle filters the grid and is remembered.
 2. Click a line to play it. Space pauses, `j`/`k` or arrow keys step through lines.
 3. Add lines with `+`, a whole section with "Select section", or everything with "Add all to sample set".
 4. Optional: "Curate with Claude" asks Claude to tag every line with an emotion, clean the transcript for TTS, and pick the best 10-15 clips. The button then adds those picks to the set in one click.
-5. Open "Sample set" and press "Export WAV".
+5. Open "Sample set" and press "Export WAV". The browser converts the clips and downloads `voicebank.zip`.
 
-Exports land in `data/{game}/{Character}/{lang}/` as `{title}-{hash}.wav` plus `metadata.jsonl`, one JSON object per line:
+Unzip it in the project root: clips land in `data/{game}/{Character}/{lang}/` as `{title}-{hash}.wav` plus `metadata.jsonl`, one JSON object per line:
 
 ```json
 {
@@ -36,15 +47,15 @@ Exports land in `data/{game}/{Character}/{lang}/` as `{title}-{hash}.wav` plus `
 }
 ```
 
-Clips already on disk are skipped, so re-exporting a larger selection only fetches the new ones. The selection itself is kept in `localStorage`.
+Each export zips the whole selection, so unzipping over an earlier export replaces its `metadata.jsonl` files. Decoding the wiki's Ogg clips needs Chrome or Firefox; Safari may fail. The selection itself is kept in `localStorage`.
 
 ## How it works
 
-- **Server** (`server/`, Hono, runs inside the Vite dev server): talks to each wiki's MediaWiki `api.php`, parses the rendered voice-over page with cheerio, proxies audio and portraits from the Fandom CDN (which needs a `Referer` from the wiki), and converts clips with `ffmpeg`.
+- **Server** (`server/`, Hono, runs inside the Vite dev server locally and as the Worker in production): talks to each wiki's MediaWiki `api.php`, parses the rendered voice-over page with cheerio, proxies audio and portraits from the Fandom CDN (which needs a `Referer` from the wiki). The UI converts clips to WAV with Web Audio and zips them with fflate.
 - **UI** (`src/`, Vue 3): vue-router for `#/{game}/{Character}?lang=ja`, VueUse for the audio controls and persisted selection, lucide icons.
 - **Curation** runs `claude -p --json-schema` from the server, so it uses your Claude Code login and subscription rather than API credits. Requires Claude Code installed and logged in. Verdicts are cached forever in `data/cache/curate-*.json`; delete one to redo a character. Model, effort and timeout come from `.env` (copy `.env.example`).
 - **Gender** comes from wiki categories (Genshin, ZZZ, WuWa). Honkai: Star Rail has none, so it is inferred from pronoun counts on the character's Lore page; a few characters (Trailblazer, Anaxa) stay unclassified and only show under "All".
-- **Caches**: character rosters are stored in `data/cache/characters-{game}.json` for 24 hours. Delete a file to refetch sooner, for example after a new character releases. Voice lines are cached in memory for the server's lifetime.
+- **Caches**: character rosters are stored in `data/cache/characters-{game}.json` for 24 hours. Delete a file to refetch sooner, for example after a new character releases. Voice lines are cached in memory for the server's lifetime. On Workers there is no disk, so both live only in each isolate's memory.
 
 Lines without a transcript on the wiki, such as combat grunts, are dropped.
 

@@ -820,20 +820,6 @@ kbd {
   color: var(--fg);
   border-color: var(--accent);
 }
-/* Overlays the text left of the remove button, so it takes no space while hidden. */
-.tray li .reveal {
-  position: absolute;
-  right: 40px;
-  background: var(--bg-2);
-  opacity: 0;
-}
-.tray li .reveal:hover {
-  background: var(--panel-2);
-}
-.tray li:hover .reveal,
-.tray li .reveal:focus-visible {
-  opacity: 1;
-}
 .tray > footer {
   display: flex;
   flex-direction: column;

@@ -27,6 +27,7 @@ import {
   type Line,
 } from "../store.ts";
 
+const local = import.meta.env.DEV; // curate shells out to the claude CLI, so only under vp dev
 const me = computed(() => state.characters[state.wiki]?.find((c) => c.name === state.character));
 const sections = computed(() => {
   const m = new Map<string, Line[]>();
@@ -83,14 +84,14 @@ const jump = (id: string) =>
             <Play :size="16" /> Play from top
           </button>
           <button
-            v-if="!picks().length"
+            v-if="local && !picks().length"
             class="ghost"
             :disabled="!state.lines.length || state.curating"
             @click="curate()"
           >
             <Sparkles :size="16" /> {{ state.curating ? "Asking Claude…" : "Curate with Claude" }}
           </button>
-          <button v-else class="ghost" @click="toggleAll(picks())">
+          <button v-else-if="picks().length" class="ghost" @click="toggleAll(picks())">
             <Sparkles :size="16" />
             {{
               allSelected(picks()) ? "Remove picks from set" : `Add ${picks().length} picks to set`
