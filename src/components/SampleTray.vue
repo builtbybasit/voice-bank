@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Download, Pause, Play, Trash2, X } from "@lucide/vue";
+import { Download, FolderOpen, Pause, Play, Trash2, X } from "@lucide/vue";
+import { useLocalStorage } from "@vueuse/core";
 import { createParser } from "eventsource-parser";
 import { computed, ref } from "vue";
 import { LANG_LABEL, play, playing, selection, state, type Item } from "../store.ts";
@@ -12,8 +13,16 @@ const groups = computed(() =>
 const remove = (i: Item) => selection.value.splice(selection.value.indexOf(i), 1);
 const label = (id: string) => state.wikis.find((w) => w.id === id)?.label ?? id;
 
-const progress = ref<{ done: number; total: number; file?: string } | null>(null);
+const progress = ref<{ done: number; total: number; file?: string; url?: string } | null>(null);
 const result = ref("");
+/** Exported WAV path per clip url, so each exported row can reveal its file. */
+const exported = useLocalStorage<Record<string, string>>("voicebank:exported", {});
+const reveal = (file: string) =>
+  fetch("/api/reveal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file }),
+  });
 
 async function exportAll() {
   progress.value = { done: 0, total: selection.value.length };
@@ -23,7 +32,13 @@ async function exportAll() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items: selection.value }),
   });
-  const parser = createParser({ onEvent: (e) => (progress.value = JSON.parse(e.data)) });
+  const parser = createParser({
+    onEvent: (e) => {
+      progress.value = JSON.parse(e.data);
+      const { url, file } = progress.value ?? {};
+      if (url && file) exported.value[url] = file;
+    },
+  });
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
   for (let r = await reader.read(); !r.done; r = await reader.read()) parser.feed(r.value);
   result.value = `${progress.value?.done} WAV files + metadata.jsonl written under data/`;
@@ -67,6 +82,14 @@ async function exportAll() {
                 ><b>{{ i.title }}</b
                 ><small>{{ i.text }}</small></span
               >
+              <button
+                v-if="exported[i.url]"
+                class="icon reveal"
+                aria-label="Show in folder"
+                @click="reveal(exported[i.url])"
+              >
+                <FolderOpen :size="14" />
+              </button>
               <button class="icon" aria-label="Remove" @click="remove(i)"><X :size="14" /></button>
             </li>
           </ul>
