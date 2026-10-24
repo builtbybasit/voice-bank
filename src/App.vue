@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { AudioLines, ImageIcon, ImageOffIcon, Library, Moon, RefreshCw, Sun } from "@lucide/vue";
+import {
+  AudioLines,
+  ImageIcon,
+  ImageOffIcon,
+  Library,
+  Moon,
+  RefreshCw,
+  ShieldAlert,
+  Sun,
+  X,
+} from "@lucide/vue";
 import Player from "@/components/Player.vue";
 import SampleTray from "@/components/SampleTray.vue";
 import { go } from "@/router.ts";
@@ -65,6 +75,16 @@ import { flush, selection, showImages, state, theme } from "@/store.ts";
       </Transition>
     </RouterView>
   </main>
+
+  <p v-if="state.blocked" class="notice" role="alert">
+    <ShieldAlert :size="18" />
+    <span
+      >Fandom's CDN didn't send that clip, most likely because it wants a captcha.
+      <a :href="state.blocked" target="_blank" rel="noopener">Open the clip</a>, complete the check
+      in that tab, then come back and try again.</span
+    >
+    <button class="icon" aria-label="Dismiss" @click="state.blocked = ''"><X :size="16" /></button>
+  </p>
 
   <Player />
   <SampleTray />

@@ -226,11 +226,3 @@ export const voiceLines = (wiki: WikiId, name: string, lang: Lang) =>
     });
     return lines;
   });
-
-/** The CDN 403s without a Referer from the wiki. Only CDN URLs are allowed through. */
-export async function fetchMedia(wiki: WikiId, url: string): Promise<Response> {
-  if (!url.startsWith("https://static.wikia.nocookie.net/")) throw new Error("not a wikia CDN url");
-  const res = await fetch(url, { headers: { Referer: `${WIKIS[wiki].base}/` } });
-  if (!res.ok) throw new Error(`media ${res.status} ${url}`);
-  return res;
-}

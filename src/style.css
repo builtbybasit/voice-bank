@@ -921,3 +921,37 @@ kbd {
     display: none;
   }
 }
+
+/* Captcha notice */
+.notice {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  translate: -50%;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(560px, calc(100% - 32px));
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--bg-2);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.3);
+}
+.notice > svg {
+  flex: none;
+  color: var(--accent);
+  margin-top: 1px;
+}
+.notice span {
+  flex: 1;
+}
+.notice a {
+  color: var(--ink);
+  font-weight: 600;
+}

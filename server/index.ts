@@ -1,15 +1,6 @@
 import { Hono } from "hono";
 import { curate } from "./curate.ts";
-import {
-  WIKIS,
-  characters,
-  fetchMedia,
-  flush,
-  voiceLines,
-  type Kv,
-  type Lang,
-  type WikiId,
-} from "./fandom.ts";
+import { WIKIS, characters, flush, voiceLines, type Kv, type Lang, type WikiId } from "./fandom.ts";
 
 try {
   process.loadEnvFile(); // .env is optional; see .env.example
@@ -40,33 +31,6 @@ app.post("/api/:wiki/flush", async (c) => {
   if (!w) return c.notFound();
   await flush(w, c.env.CACHE);
   return c.body(null, 204);
-});
-
-// Buffered so Range requests work: Chrome needs them to read an Ogg's duration. Clips are a few hundred KB at most.
-app.get("/api/:wiki/media", async (c) => {
-  const w = wiki(c.req.param("wiki"));
-  const u = c.req.query("u");
-  if (!w || !u) return c.notFound();
-  const res = await fetchMedia(w, u);
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const headers: Record<string, string> = {
-    "Content-Type": res.headers.get("content-type") ?? "application/octet-stream",
-    "Cache-Control": "public, max-age=604800",
-    "Accept-Ranges": "bytes",
-  };
-  const m = c.req.header("range")?.match(/bytes=(\d*)-(\d*)/);
-  if (!m)
-    return new Response(buf, { headers: { ...headers, "Content-Length": String(buf.length) } });
-  const from = m[1] ? Number(m[1]) : Math.max(0, buf.length - Number(m[2]));
-  const to = m[1] && m[2] ? Math.min(Number(m[2]), buf.length - 1) : buf.length - 1;
-  return new Response(buf.slice(from, to + 1), {
-    status: 206,
-    headers: {
-      ...headers,
-      "Content-Range": `bytes ${from}-${to}/${buf.length}`,
-      "Content-Length": String(to - from + 1),
-    },
-  });
 });
 
 app.get("/api/:wiki/:name/lines", async (c) => {

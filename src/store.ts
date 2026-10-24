@@ -29,6 +29,7 @@ export const state = reactive({
   curated: {} as Record<string, Verdict>,
   curating: false,
   flushing: false,
+  blocked: "", // a CDN url the browser couldn't load, usually a Cloudflare captcha
 });
 export const selection = useLocalStorage<Item[]>("voicebank:selection", []);
 export const showImages = useLocalStorage("voicebank:images", false);
@@ -39,12 +40,9 @@ export const theme = useColorMode({
 });
 
 export const wiki = () => state.wikis.find((w) => w.id === state.wiki);
-export const media = (wikiId: string, url: string) =>
-  `/api/${wikiId}/media?u=${encodeURIComponent(url)}`;
+/** Clips and portraits load straight from the CDN: Cloudflare challenges Node's fetch, not browsers. */
 export const portrait = (c: Character, width = 480) =>
-  c.image
-    ? media(state.wiki, c.image.replace(/scale-to-width-down\/\d+/, `scale-to-width-down/${width}`))
-    : "";
+  c.image?.replace(/scale-to-width-down\/\d+/, `scale-to-width-down/${width}`) ?? "";
 export const isSelected = (url: string) => selection.value.some((i) => i.url === url);
 export const toggle = (line: Line) => {
   const i = selection.value.findIndex((s) => s.url === line.url);
@@ -61,7 +59,7 @@ export const toggle = (line: Line) => {
 /** One <audio autoplay> lives in Player.vue; VueUse keeps playing/currentTime/duration in sync with it. */
 export const audioEl = ref<HTMLAudioElement>();
 export const { playing, currentTime, duration, ended, waiting } = useMediaControls(audioEl, {
-  src: computed(() => (state.playing ? media(state.playing.wiki, state.playing.url) : "")),
+  src: computed(() => state.playing?.url ?? ""),
 });
 watch(ended, (e) => e && step(1));
 export const isLoading = (url: string) => state.playing?.url === url && waiting.value;

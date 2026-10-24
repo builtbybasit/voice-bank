@@ -23,7 +23,12 @@ onKeyStroke(["ArrowUp", "k"], (e) => !typing(e) && (e.preventDefault(), step(-1)
 <template>
   <Transition name="rise">
     <footer v-if="state.playing" class="player">
-      <audio ref="audioEl" autoplay @error="waiting = false"></audio>
+      <audio
+        ref="audioEl"
+        autoplay
+        @error="((waiting = false), (state.blocked = state.playing!.url))"
+        @loadeddata="state.blocked = ''"
+      ></audio>
       <div class="track" @click="seek">
         <div
           class="fill"

@@ -2,16 +2,7 @@
 import { Download, LoaderCircle, Pause, Play, Trash2, X } from "@lucide/vue";
 import { strToU8, zipSync } from "fflate";
 import { computed, ref } from "vue";
-import {
-  LANG_LABEL,
-  isLoading,
-  media,
-  play,
-  playing,
-  selection,
-  state,
-  type Item,
-} from "@/store.ts";
+import { LANG_LABEL, isLoading, play, playing, selection, state, type Item } from "@/store.ts";
 
 const groups = computed(() =>
   Map.groupBy(selection.value, (i) => `${i.wiki}/${i.character}/${i.lang}`)
@@ -65,13 +56,18 @@ async function exportAll() {
   const files: Record<string, Uint8Array> = {};
   const meta: Record<string, string> = {};
   result.value = "";
+  state.blocked = "";
   progress.value = { done: 0, total: items.length };
   try {
     for (const [done, it] of items.entries()) {
       const dir = `data/${it.wiki}/${slug(it.character)}/${it.lang}`;
       const file = `${dir}/${slug(it.title)}-${await hash(it.url)}.wav`;
-      const res = await fetch(media(it.wiki, it.url));
-      if (!res.ok) throw new Error(`${it.title}: ${res.status}`);
+      // A challenge page has no CORS header, so fetch rejects instead of returning the 403.
+      const res = await fetch(it.url).catch(() => null);
+      if (!res?.ok) {
+        state.blocked = it.url;
+        throw new Error(`couldn't fetch “${it.title}”`);
+      }
       files[file] = await wav(await res.arrayBuffer());
       meta[dir] =
         (meta[dir] ?? "") +
